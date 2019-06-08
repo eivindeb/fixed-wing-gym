@@ -24,5 +24,5 @@ setup(
         "scipy==1.3.0",
         "six==1.12.0"
     ],
-    dependency_links=['http://github.com/eivindeb/pyfly/tarball/master#egg=package-1.0']
+    dependency_links=['http://github.com/eivindeb/pyfly/tarball/master#egg=package-0.1.0']
 )
