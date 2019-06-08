@@ -22,8 +22,8 @@ setup(
         "pyparsing==2.4.0",
         "python-dateutil==2.8.0",
         "scipy==1.3.0",
-        "six==1.12.0"
+        "six==1.12.0",
         "pyfly==0.1.0"
     ],
-    dependency_links=['http://github.com/eivindeb/pyfly/tarball/master#egg=package-0.1.0']
+    dependency_links=['http://github.com/eivindeb/pyfly/tarball/master#egg=pyfly-0.1.0']
 )
