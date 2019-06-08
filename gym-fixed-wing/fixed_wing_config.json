@@ -1,0 +1,231 @@
+{
+  "steps_max": 2000,
+  "observation": {
+    "length": 5,
+    "step": 1,
+    "shape": "matrix",
+    "states": [
+      {
+        "name": "roll",
+        "low": -180,
+        "high": 180,
+        "convert_to_radians": true,
+        "type": "state"
+      },
+      {
+        "name": "pitch",
+        "low": -85,
+        "high": 85,
+        "convert_to_radians": true,
+        "type": "state"
+      },
+      {
+        "name": "Va",
+        "high": 60,
+        "type": "state"
+
+      },
+      {
+        "name": "omega_p",
+        "low": -720,
+        "high": 720,
+        "convert_to_radians": true,
+        "type": "state"
+      },
+      {
+        "name": "omega_q",
+        "low": -720,
+        "high": 720,
+        "convert_to_radians": true,
+        "type": "state"
+      },
+      {
+        "name": "omega_r",
+        "low": -720,
+        "high": 720,
+        "convert_to_radians": true,
+        "type": "state"
+      },
+      {
+        "name": "roll",
+        "type": "target",
+        "value": "relative"
+      },
+      {
+        "name": "pitch",
+        "type": "target",
+        "value": "relative"
+      },
+      {
+        "name": "Va",
+        "type": "target",
+        "value": "relative"
+      },
+      {
+        "name": "elevator",
+        "type": "action",
+        "window_size": 5
+      },
+      {
+        "name": "aileron",
+        "type": "action",
+        "window_size": 5
+      },
+      {
+        "name": "throttle",
+        "type": "action",
+        "window_size": 5
+      }
+    ]
+  },
+  "action": {
+    "scale_space": true,
+    "bounds_multiplier": 1.5,
+    "bounds_outside_cost": 1,
+    "states": [
+      {
+        "name": "elevator",
+        "low": null,
+        "high": null
+      },
+      {
+        "name": "aileron",
+        "low": null,
+        "high": null
+      },
+      {
+        "name": "throttle",
+        "low": null,
+        "high": null
+      }
+    ]
+  },
+  "target": {
+    "resample_every": 0,
+    "success_streak_req": 100,
+    "success_streak_fraction": 0.95,
+    "on_success": "none",
+    "success_reward": 0,
+    "states": [
+      {
+        "name": "roll",
+        "convert_to_radians": true,
+        "low": [-20, -45, -60],
+        "high": [20, 45, 60],
+        "delta": [10, 45, 180],
+        "class": ["constant", "constant", "constant", "constant", "constant"],
+        "bound": 3,
+        "amplitude_low": 160,
+        "amplitude_high": 160,
+        "period_low": 1000,
+        "period_high": 1000
+      },
+      {
+        "name": "pitch",
+        "convert_to_radians": true,
+        "low": [-10, -20, -25],
+        "high": [10, 20, 25],
+        "delta": [5, 20, 45],
+        "class": ["constant", "constant", "constant", "constant", "constant"],
+        "bound": 3,
+        "period_low": 300,
+        "period_high": 600,
+        "amplitude_low": 5,
+        "amplitude_high": 10
+      },
+      {
+        "name": "Va",
+        "low": [18, 14, 15],
+        "high": [23, 25, 28],
+        "delta": [3, 4, 6],
+        "class": "compensate",
+        "bound": 2
+      }
+    ]
+  },
+  "reward": [
+    {
+      "state": "roll",
+      "type": "error",
+      "max": 0.30,
+      "scaling": 3.2
+    },
+    {
+      "state": "pitch",
+      "type": "error",
+      "max": 0.30,
+      "scaling": 2.2
+    },
+    {
+      "state": "Va",
+      "type": "error",
+      "max": 0.30,
+      "scaling": 25
+    },
+    {
+      "state": "action",
+      "type": "delta",
+      "window_size": 5,
+      "max": 0.1,
+      "scaling": 60
+    }
+  ],
+  "states": [
+    {
+      "name": "roll",
+      "init_min": [-30, -60, -110],
+      "init_max": [30, 60, 110],
+      "convert_to_radians": true
+    },
+    {
+      "name": "pitch",
+      "init_min": [-15, -30, -45],
+      "init_max": [15, 30, 45],
+      "convert_to_radians": true
+    },
+    {
+      "name": "velocity_u",
+      "init_min": [18, 12, 10],
+      "init_max": [23, 23, 23]
+    },
+    {
+      "name": "velocity_v",
+      "init_min": [0, -2.5, -5],
+      "init_max": [0, 2.5, 5]
+    },
+    {
+      "name": "velocity_w",
+      "init_min": [0, -2.5, -5],
+      "init_max": [0, 2.5, 5]
+    },
+    {
+      "name": "omega_p",
+      "init_min": [0, -30, -60],
+      "init_max": [0, 30, 60],
+      "constraint_min": [-360, -360, null],
+      "constraint_max": [360, 360, null],
+      "convert_to_radians": true
+    },
+    {
+      "name": "omega_q",
+      "init_min": [0, -30, -60],
+      "init_max": [0, 30, 60],
+      "constraint_min": [-360, -360, null],
+      "constraint_max": [360, 360, null],
+      "convert_to_radians": true
+    },
+    {
+      "name": "omega_r",
+      "init_min": [0, -30, -60],
+      "init_max": [0, 30, 60],
+      "constraint_min": [-360, -360, null],
+      "constraint_max": [360, 360, null],
+      "convert_to_radians": true
+    }
+  ],
+  "render": {
+    "plot_action": true,
+    "plot_reward": true,
+    "plot_target": true
+  }
+}
