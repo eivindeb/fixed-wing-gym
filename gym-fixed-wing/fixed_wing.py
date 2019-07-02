@@ -11,7 +11,7 @@ from collections import deque
 
 
 class FixedWingAircraft(gym.Env):
-    def __init__(self, config_path, sim_config_path, sim_parameter_path, config_kw=None, sim_config_kw=None):
+    def __init__(self, config_path, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
         """
         A gym environment for fixed-wing aircraft, interfacing the python flight simulator PyFly to the openAI
         environment.
@@ -34,7 +34,12 @@ class FixedWingAircraft(gym.Env):
         if config_kw is not None:
             set_config_attrs(self.cfg, config_kw)
 
-        self.simulator = PyFly(sim_config_path, sim_parameter_path, sim_config_kw)
+        pyfly_kw = {"config_kw": sim_config_kw}
+        if sim_config_path is not None:
+            pyfly_kw["config_path"] = sim_config_path
+        if sim_parameter_path is not None:
+            pyfly_kw["parameter_path"] = sim_parameter_path
+        self.simulator = PyFly(**pyfly_kw)
         self.history = None
         self.steps_count = None
         self.steps_max = self.cfg["steps_max"]
@@ -651,10 +656,10 @@ class FixedWingAircraft(gym.Env):
         return res
 
 if __name__ == "__main__":
-    from pyfly import PyFly
-    from pid_controller import PIDController
+    from pyfly.pyfly import PyFly
+    from pyfly.pid_controller import PIDController
 
-    env = FixedWingAircraft("fixedwing_env_config.json", "pyfly_config.json", "x8_param.mat", config_kw={"steps_max": 500})
+    env = FixedWingAircraft("fixed_wing_config.json", config_kw={"steps_max": 500})
     env.seed(0)
 
     obs = env.reset()
