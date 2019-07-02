@@ -388,7 +388,7 @@ class FixedWingAircraft(gym.Env):
 
             self._target_props[target_var_name] = var_props
 
-    def render(self, mode="plot", close=True, save_path=None):
+    def render(self, mode="plot", close=True, block=False, save_path=None):
         """
         Visualize environment history. Plots of action and reward can be enabled through configuration file.
 
@@ -437,7 +437,7 @@ class FixedWingAircraft(gym.Env):
                 else:
                     plt.savefig(save_path, bbox_inches="tight")
 
-            plt.show(block=False)
+            plt.show(block=block)
 
             if close:
                 self.viewer = None
@@ -676,5 +676,5 @@ if __name__ == "__main__":
         action = pid.get_action(phi, theta, Va, omega)
         obs, rew, done, info = env.step(action)
 
-    env.render()
+    env.render(block=True)
 
