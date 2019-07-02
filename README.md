@@ -7,6 +7,6 @@ fixed-wing aircraft.
 
 ## Installation
 
-```text
+```shell
 pip install -e . --process-dependency-links
 ```
