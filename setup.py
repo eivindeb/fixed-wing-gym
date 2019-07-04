@@ -1,14 +1,14 @@
 from setuptools import setup
 
 setup(
-    name='gym-fixed-wing',
+    name='gym_fixed_wing',
     version='0.1.0',
     url="https://github.com/eivindeb/fixed-wing-gym",
     author="Eivind Bøhn",
     author_email="eivind.bohn@gmail.com",
     description="OpenAI Gym wrapper for PyFly - Fixed-Wing Flight Simulator",
-    packages=['gym-fixed-wing'],
-    package_data={"gym-fixed-wing": ["fixed_wing_config.json"]},
+    packages=['gym_fixed_wing'],
+    package_data={"gym_fixed_wing": ["fixed_wing_config.json"]},
     license='MIT',
     long_description_content_type='text/markdown',
     long_description=open('README.md').read(),

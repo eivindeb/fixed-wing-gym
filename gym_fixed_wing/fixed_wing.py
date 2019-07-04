@@ -1,6 +1,6 @@
 import gym
 from gym.utils import seeding
-from gym import spaces
+from pyfly.pyfly import PyFly
 import json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -656,7 +656,6 @@ class FixedWingAircraft(gym.Env):
         return res
 
 if __name__ == "__main__":
-    from pyfly.pyfly import PyFly
     from pyfly.pid_controller import PIDController
 
     env = FixedWingAircraft("fixed_wing_config.json", config_kw={"steps_max": 500})
