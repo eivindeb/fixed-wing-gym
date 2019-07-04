@@ -431,6 +431,8 @@ class FixedWingAircraft(gym.Env):
             self.simulator.render(close=close, targets=targets, viewer=self.viewer)
 
             if save_path is not None:
+                if not os.path.isdir(os.path.dirname(save_path)):
+                    os.makedirs(os.path.dirname(save_path))
                 _, ext = os.path.splitext(save_path)
                 if ext != "":
                     plt.savefig(save_path, bbox_inches="tight", format=ext[1:])
