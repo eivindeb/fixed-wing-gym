@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 
 setup(
     name='gym-fixed-wing',
@@ -7,7 +7,8 @@ setup(
     author="Eivind Bøhn",
     author_email="eivind.bohn@gmail.com",
     description="OpenAI Gym wrapper for PyFly - Fixed-Wing Flight Simulator",
-    py_modules=['gym-fixed-wing',],
+    packages=['gym-fixed-wing'],
+    package_data={"gym-fixed-wing": ["fixed_wing_config.json"]},
     license='MIT',
     long_description_content_type='text/markdown',
     long_description=open('README.md').read(),
