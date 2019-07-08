@@ -98,41 +98,52 @@ class FixedWingAircraft(gym.Env):
                 raise ValueError
 
         action_low = []
+        action_space_low = []
         action_high = []
+        action_space_high = []
         for action_var in self.cfg["action"]["states"]:
-            high = action_var.pop("high", None)
-            if high is None:
-                state = self.simulator.state[action_var["name"]]
-                if state.value_max is not None:
-                    high = state.value_max
-                elif state.constraint_max is not None:
-                    high = state.constraint_max
-                else:
-                    high = np.finfo(np.float32).max
-            elif high == "max":
-                high = np.finfo(np.float32).max
-            action_high.append(high)
+            space_high = action_var.pop("high", None)
 
-            low = action_var.pop("low", None)
-            if low is None:
-                state = self.simulator.state[action_var["name"]]
-                if state.value_min is not None:
-                    low = state.value_min
-                elif state.constraint_min is not None:
-                    low = state.constraint_min
-                else:
-                    low = -np.finfo(np.float32).max
-            elif low == "max":
-                low = -np.finfo(np.float32).max
-            action_low.append(low)
+            state = self.simulator.state[action_var["name"]]
+            if state.value_max is not None:
+                state_high = state.value_max
+            elif state.constraint_max is not None:
+                state_high = state.constraint_max
+            else:
+                state_high = np.finfo(np.float32).max
+
+            if space_high == "max":
+                action_space_high.append(np.finfo(np.float32).max)
+            elif space_high is None:
+                action_space_high.append(state_high)
+            else:
+                action_space_high.append(space_high)
+            action_high.append(state_high)
+
+            space_low = action_var.pop("low", None)
+
+            if state.value_min is not None:
+                state_low = state.value_min
+            elif state.constraint_min is not None:
+                state_low = state.constraint_min
+            else:
+                state_low = -np.finfo(np.float32).max
+
+            if space_low == "max":
+                action_space_low.append(-np.finfo(np.float32).max)
+            elif space_low is None:
+                action_space_low.append(state_low)
+            else:
+                action_space_low.append(space_low)
+            action_low.append(state_low)
 
         self.observation_space = gym.spaces.Box(low=np.array(obs_low), high=np.array(obs_high), dtype=np.float32)
-        self.action_lim_low = np.array(action_low)
-        self.action_lim_high = np.array(action_high)
+        self.action_scaling_low = np.array(action_low)
+        self.action_scaling_high = np.array(action_high)
         # Some agents simply clip produced actions to match action space, not allowing agent to learn that producing
         # actions outside this space is bad.
-        self.action_space = gym.spaces.Box(low=np.full(self.action_lim_low.shape, -np.finfo(np.float32).max),
-                                           high=np.full(self.action_lim_high.shape, np.finfo(np.float32).max),
+        self.action_space = gym.spaces.Box(low=np.array(action_space_low),
+                                           high=np.array(action_space_high),
                                            dtype=np.float32)
 
         self.scale_actions = self.cfg["action"].get("scale_space", False)
@@ -247,8 +258,8 @@ class FixedWingAircraft(gym.Env):
         :param action: ([float]) the action chosen by the agent
         :return: ([float], float, bool, dict) observation vector, reward, done, extra information about episode on done
         """
-        def linear_scaling(a, lim_high, lim_low):
-            return np.array(lim_high - lim_low) * (a - (-1)) / 2 + lim_low
+        def linear_scaling(a, new_max, new_min, old_max, old_min):
+            return np.array(new_max - new_min) * (a - old_min) / (old_max - old_min) + new_min
 
         self.history["action"].append(action)
 
@@ -260,7 +271,11 @@ class FixedWingAircraft(gym.Env):
             action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0) *\
                 self.action_outside_bounds_cost
         if self.scale_actions:
-            action = linear_scaling(np.clip(action, -1, 1), self.action_lim_high, self.action_lim_low)
+            action = linear_scaling(np.clip(action, self.action_space.low, self.action_space.high),
+                                    self.action_scaling_high,
+                                    self.action_scaling_low,
+                                    self.action_space.high,
+                                    self.action_space.low)
 
         control_input = list(action)
         for i, actuator in enumerate(self.simulator.inputs):
