@@ -79,7 +79,7 @@
     ]
   },
   "action": {
-    "scale_space": true,
+    "scale_space": false,
     "bounds_multiplier": 1.5,
     "bounds_outside_cost": 1,
     "states": [
