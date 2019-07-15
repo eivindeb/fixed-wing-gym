@@ -191,7 +191,10 @@ class FixedWingAircraft(gym.Env):
                 state_name = state.pop("name")
                 convert_to_radians = state.pop("convert_to_radians", False)
                 for prop, values in state.items():
-                    val = values[self._schedule_level]
+                    if isinstance(values, list):
+                        val = values[self._schedule_level]
+                    else:
+                        val = values
                     if convert_to_radians and val is not None:
                         val = np.radians(val)
                     setattr(self.simulator.state[state_name], prop, val)
