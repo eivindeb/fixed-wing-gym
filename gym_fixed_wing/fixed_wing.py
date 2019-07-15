@@ -609,11 +609,12 @@ class FixedWingAircraft(gym.Env):
         """
         goal_status = {}
         for state, props in self._target_props_init["states"].items():
-            err = self._get_error(state)
-            bound = props["bound"]
-            if props.get("convert_to_radians", False):
-                bound = np.radians(bound)
-            goal_status[state] = np.abs(err) <= bound
+            bound = props.get("bound", None)
+            if bound is not None:
+                err = self._get_error(state)
+                if props.get("convert_to_radians", False):
+                    bound = np.radians(bound)
+                goal_status[state] = np.abs(err) <= bound
 
         goal_status["all"] = all(goal_status.values())
 
