@@ -526,6 +526,8 @@ class FixedWingAircraft(gym.Env):
                 val = self.simulator.state[component["state"]].value
             elif component["type"] == "error":
                 val = self._get_error(component["state"])
+            elif component["type"] == "int_error":
+                val = np.sum(self.history["error"][component["state"]])
             else:
                 raise ValueError("Unexpected reward component type {}".format(component["type"]))
 
@@ -572,6 +574,11 @@ class FixedWingAircraft(gym.Env):
                         obs_i.append(self._get_error(obs_var["name"]) if i == 1 else self.history["error"][obs_var["name"]][-i])
                     elif obs_var["value"] == "absolute":
                         obs_i.append(self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i])
+                    elif obs_var["value"] == "integrator":
+                        if self.history is None:
+                            obs_i.append(self._get_error(obs_var["name"]))
+                        else:
+                            obs_i.append(np.sum(self.history["error"][obs_var["name"]][:-i]))
                     else:
                         raise ValueError("Unexpected observation variable target value type: {}".format(obs_var["value"]))
                 elif obs_var["type"] == "action":
