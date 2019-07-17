@@ -503,8 +503,9 @@ class FixedWingAircraft(gym.Env):
         :return: (float) reward
         """
         reward = 0
+        terms = {term["function_class"]: {"val": 0, "weight": term["weight"]} for term in self.cfg["reward"]["terms"]}
 
-        for component in self.cfg["reward"]:
+        for component in self.cfg["reward"]["states"]:
             if component["state"] == "action":
                 if component["type"] == "value":
                     val = np.sum(np.abs(self.history["action"][-1]))
@@ -528,7 +529,24 @@ class FixedWingAircraft(gym.Env):
             else:
                 raise ValueError("Unexpected reward component type {}".format(component["type"]))
 
-            reward -= np.clip(np.abs(val) / component["scaling"], 0, component["max"])
+            if component["function_class"] == "linear":
+                terms[component["function_class"]]["val"] -= np.clip(np.abs(val) / component["scaling"],
+                                                                     0,
+                                                                     component.get("max", None))
+            elif component["function_class"] == "exponential":
+                terms[component["function_class"]]["val"] -= val ** 2 / component["scaling"]
+            else:
+                raise ValueError("Unexpected function class {} for {}".format(component["function_class"],
+                                                                              component["state"]))
+
+        for term_class, term_info in terms.items():
+            if term_class == "exponential":
+                val = -1 + np.exp(term_info["val"])
+            elif term_class == "linear":
+                val = term_info["val"]
+            else:
+                raise ValueError("Unexpected function class {}".format(term_class))
+            reward += term_info["weight"] * val
 
         return reward
 
