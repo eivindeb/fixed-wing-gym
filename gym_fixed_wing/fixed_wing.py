@@ -336,10 +336,6 @@ class FixedWingAircraft(gym.Env):
             done = True
             info["termination"] = step_info["termination"]
             obs = self.get_observation()
-            if self.steps_max > 0:
-                reward = self.steps_count - self.steps_max
-            else:
-                reward -= 100
 
         if self.action_outside_bounds_cost > 0:
             reward -= np.sum(np.abs(action_rew_high)) + np.sum(np.abs(action_rew_low))
