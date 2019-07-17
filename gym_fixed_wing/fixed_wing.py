@@ -138,8 +138,8 @@ class FixedWingAircraft(gym.Env):
             action_low.append(state_low)
 
         self.observation_space = gym.spaces.Box(low=np.array(obs_low), high=np.array(obs_high), dtype=np.float32)
-        self.action_scaling_low = np.array(action_low)
-        self.action_scaling_high = np.array(action_high)
+        self.action_scale_to_low = np.array(action_low)
+        self.action_scale_to_high = np.array(action_high)
         # Some agents simply clip produced actions to match action space, not allowing agent to learn that producing
         # actions outside this space is bad.
         self.action_space = gym.spaces.Box(low=np.array(action_space_low),
@@ -150,8 +150,10 @@ class FixedWingAircraft(gym.Env):
 
         if self.cfg["action"].get("bounds_multiplier", None) is not None:
             self.action_outside_bounds_cost = self.cfg["action"].get("bounds_outside_cost", 0)
-            self.action_bounds_max = np.array([1, 1, 1]) * self.cfg["action"]["bounds_multiplier"]
-            self.action_bounds_min = np.array([-1, -1, -1]) * self.cfg["action"]["bounds_multiplier"]
+            self.action_bounds_max = np.full(self.action_space.shape, self.cfg["action"].get("scale_high", 1)) *\
+                                     self.cfg["action"]["bounds_multiplier"]
+            self.action_bounds_min = np.full(self.action_space.shape, self.cfg["action"].get("scale_low", -1)) *\
+                                     self.cfg["action"]["bounds_multiplier"]
 
         self.goal_enabled = self.cfg["target"]["success_streak_req"] > 0
 
@@ -261,8 +263,6 @@ class FixedWingAircraft(gym.Env):
         :param action: ([float]) the action chosen by the agent
         :return: ([float], float, bool, dict) observation vector, reward, done, extra information about episode on done
         """
-        def linear_scaling(a, new_max, new_min, old_max, old_min):
-            return np.array(new_max - new_min) * (a - old_min) / (old_max - old_min) + new_min
 
         self.history["action"].append(action)
 
@@ -274,11 +274,11 @@ class FixedWingAircraft(gym.Env):
             action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0) *\
                 self.action_outside_bounds_cost
         if self.scale_actions:
-            action = linear_scaling(np.clip(action, self.action_space.low, self.action_space.high),
-                                    self.action_scaling_high,
-                                    self.action_scaling_low,
-                                    self.action_space.high,
-                                    self.action_space.low)
+            action = self.linear_action_scaling(np.clip(action,
+                                                        self.cfg["action"].get("scale_low"),
+                                                        self.cfg["action"].get("scale_high")
+                                                        )
+                                                )
 
         control_input = list(action)
         for i, actuator in enumerate(self.simulator.inputs):
@@ -359,6 +359,21 @@ class FixedWingAircraft(gym.Env):
                     info["success"][state] = success
 
         return obs, reward, done, info
+
+    def linear_action_scaling(self, a, direction="forward"):
+        if direction == "forward":
+            new_max = self.action_scale_to_high
+            new_min = self.action_scale_to_low
+            old_max = self.cfg["action"].get("scale_high")
+            old_min = self.cfg["action"].get("scale_low")
+        elif direction == "backward":
+            old_max = self.action_scale_to_high
+            old_min = self.action_scale_to_low
+            new_max = self.cfg["action"].get("scale_high")
+            new_min = self.cfg["action"].get("scale_low")
+        else:
+            raise ValueError("Invalid value for direction {}".format(direction))
+        return np.array(new_max - new_min) * (a - old_min) / (old_max - old_min) + new_min
 
     def sample_target(self):
         """

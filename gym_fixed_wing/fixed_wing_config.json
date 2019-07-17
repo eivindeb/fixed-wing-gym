@@ -80,23 +80,25 @@
   },
   "action": {
     "scale_space": false,
+    "scale_low": -1,
+    "scale_high": 1,
     "bounds_multiplier": 1.5,
     "bounds_outside_cost": 1,
     "states": [
       {
         "name": "elevator",
-        "low": null,
-        "high": null
+        "low": "max",
+        "high": "max"
       },
       {
         "name": "aileron",
-        "low": null,
-        "high": null
+        "low": "max",
+        "high": "max"
       },
       {
         "name": "throttle",
-        "low": null,
-        "high": null
+        "low": "max",
+        "high": "max"
       }
     ]
   },
