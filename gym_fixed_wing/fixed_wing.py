@@ -294,7 +294,7 @@ class FixedWingAircraft(gym.Env):
         info = {}
         done = False
 
-        if self.steps_max > 0 and self.steps_count >= self.steps_max:
+        if self.steps_count >= self.steps_max > 0:
             done = True
             info["termination"] = "steps"
 
