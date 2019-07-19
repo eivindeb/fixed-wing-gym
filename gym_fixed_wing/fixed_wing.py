@@ -281,9 +281,6 @@ class FixedWingAircraft(gym.Env):
                                                 )
 
         control_input = list(action)
-        for i, actuator in enumerate(self.simulator.inputs):
-            if actuator not in actuators:
-                control_input.insert(i, 0)
 
         step_success, step_info = self.simulator.step(control_input)
 
