@@ -48,10 +48,13 @@ class FixedWingAircraft(gym.Env):
         self.viewer = None
 
         self.np_random = np.random.RandomState()
+        self.obs_norm_mean_mask = []
 
         obs_low = []
         obs_high = []
         for obs_var in self.cfg["observation"]["states"]:
+            self.obs_norm_mean_mask.append(obs_var.get("mask_mean", False))
+
             high = obs_var.get("high", None)
             if high is None:
                 state = self.simulator.state[obs_var["name"]]
@@ -91,11 +94,15 @@ class FixedWingAircraft(gym.Env):
             if self.cfg["observation"]["shape"] == "vector":
                 obs_low = obs_low * self.cfg["observation"]["length"]
                 obs_high = obs_high * self.cfg["observation"]["length"]
+                self.obs_norm_mean_mask = self.obs_norm_mean_mask * self.cfg["observation"]["length"]
             elif self.cfg["observation"]["shape"] == "matrix":
                 obs_low = [obs_low for _ in range(self.cfg["observation"]["length"])]
                 obs_high = [obs_high for _ in range(self.cfg["observation"]["length"])]
+                self.obs_norm_mean_mask = [self.obs_norm_mean_mask for _ in range(self.cfg["observation"]["length"])]
             else:
                 raise ValueError
+
+        self.obs_norm_mean_mask = np.array(self.obs_norm_mean_mask)
 
         action_low = []
         action_space_low = []

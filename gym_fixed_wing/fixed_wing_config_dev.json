@@ -47,44 +47,40 @@
         "type": "state"
       },
       {
-        "name": "omega_p",
-        "type": "target",
-        "value": "relative"
-      },
-      {
-        "name": "omega_q",
-        "type": "target",
-        "value": "relative"
-      },
-      {
-        "name": "omega_r",
-        "type": "target",
-        "value": "relative"
-      },
-      {
-        "name": "Va",
-        "type": "target",
-        "value": "relative"
-      },
-      {
-        "name": "Va",
-        "type": "target",
-        "value": "relative"
-      },
-      {
         "name": "roll",
         "type": "target",
-        "value": "integrator"
+        "value": "relative",
+        "mask_mean": true
       },
       {
         "name": "pitch",
         "type": "target",
-        "value": "integrator"
+        "value": "relative",
+        "mask_mean": true
       },
       {
         "name": "Va",
         "type": "target",
-        "value": "integrator"
+        "value": "relative",
+        "mask_mean": true
+      },
+      {
+        "name": "roll",
+        "type": "target",
+        "value": "integrator",
+        "mask_mean": true
+      },
+      {
+        "name": "pitch",
+        "type": "target",
+        "value": "integrator",
+        "mask_mean": true
+      },
+      {
+        "name": "Va",
+        "type": "target",
+        "value": "integrator",
+        "mask_mean": true
       },
       {
         "name": "elevator",
