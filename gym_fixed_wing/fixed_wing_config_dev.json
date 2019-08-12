@@ -291,8 +291,9 @@
     }
   ],
   "render": {
-    "plot_action": true,
-    "plot_reward": true,
-    "plot_target": true
+    "plot_action": false,
+    "plot_reward": false,
+    "plot_target": true,
+    "plot_goal": true
   }
 }

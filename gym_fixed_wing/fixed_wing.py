@@ -427,6 +427,7 @@ class FixedWingAircraft(gym.Env):
 
         :param mode: (str) render mode, one of plot for graph representation and animation for 3D animation with blender
         :param close: (bool) if figure should be closed after showing, or reused for next render call
+        :param block: (bool) block argument to matplotlib blocking script from continuing until figure is closed
         :param save_path (str) if given, render is saved to this path.
         """
         if self.training and not self.render_on_reset:
@@ -435,7 +436,14 @@ class FixedWingAircraft(gym.Env):
             return
 
         if mode == "plot":
-            targets = self.history["target"] if self.cfg["render"]["plot_target"] else None
+            if self.cfg["render"]["plot_target"]:
+                targets = {k: {"data": np.array(v)} for k, v in self.history["target"].items()}
+                if self.cfg["render"]["plot_goal"]:
+                    for state, status in self.history["goal"].items():
+                        if state == "all":
+                            continue
+                        bound = self._target_props[state].get("bound")
+                        targets[state]["bound"] = np.where(status, bound, np.nan)
 
             self.viewer = {"fig": plt.figure(figsize=(9, 16))}
 
