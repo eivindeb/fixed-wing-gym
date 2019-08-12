@@ -11,7 +11,7 @@ from collections import deque
 
 
 class FixedWingAircraft(gym.Env):
-    def __init__(self, config_path, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
+    def __init__(self, config_path, sampler=None, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
         """
         A gym environment for fixed-wing aircraft, interfacing the python flight simulator PyFly to the openAI
         environment.
@@ -173,6 +173,8 @@ class FixedWingAircraft(gym.Env):
         self.render_on_reset_kw = {}
         self.save_on_reset = False
 
+        self.sampler = sampler
+
         self._schedule_level = None
         self.set_schedule_level(0)
 
@@ -226,6 +228,16 @@ class FixedWingAircraft(gym.Env):
                     self._target_props_init[attr] = val[self._schedule_level]
                 else:
                     self._target_props_init[attr] = val
+
+        # TODO: add support for setting state ranges (how to sync across threads, and make sure states are added only once?
+        # TODO: this will update state_range twice when loaded on higher level, and therefore do calculations twice unneccesarily
+        if self.sampler is not None:
+            for state, attrs in self._target_props_init["states"].items():
+                if attrs.get("convert_to_radians", False):
+                    low, high = np.radians(attrs["low"]), np.radians(attrs["high"])
+                else:
+                    low, high = attrs["low"], attrs["high"]
+                self.sampler.add_state("{}_target".format(state), state_range=(low, high))
 
     def reset(self, state=None, target=None):
         """
@@ -345,22 +357,30 @@ class FixedWingAircraft(gym.Env):
             reward -= np.sum(np.abs(action_rew_high)) + np.sum(np.abs(action_rew_low))
 
         if done:
-            info["avg_errors"] = {k: np.abs(np.mean(v) / v[0]) if v[0] != 0 else np.nan for k, v in self.history["error"].items()}
-            if self.goal_enabled:
-                info["settle_time"] = {}
-                info["success"] = {}
-                for state, goal_status in self.history["goal"].items():
-                    streak = deque(maxlen=self.cfg["target"]["success_streak_req"])
-                    settle_time = np.nan
-                    success = False
-                    for i, step_goal in enumerate(goal_status):
-                        streak.append(step_goal)
-                        if len(streak) == self.cfg["target"]["success_streak_req"] and np.mean(streak) >= self.cfg["target"]["success_streak_fraction"]:
-                            settle_time = i
-                            success = True
-                            break
-                    info["settle_time"][state] = settle_time
-                    info["success"][state] = success
+            info["avg_errors"] = {k: np.abs(np.mean(v) / v[0]) if v[0] != 0 else np.nan for k, v in
+                                  self.history["error"].items()}
+            info["settle_time"] = {}
+            info["success"] = {}
+            for state, goal_status in self.history["goal"].items():
+                streak = deque(maxlen=self.cfg["target"]["success_streak_req"])
+                settle_time = np.nan
+                success = False
+                for i, step_goal in enumerate(goal_status):
+                    streak.append(step_goal)
+                    if len(streak) == self.cfg["target"]["success_streak_req"] and np.mean(streak) >= \
+                            self.cfg["target"]["success_streak_fraction"]:
+                        settle_time = i
+                        success = True
+                        break
+                info["settle_time"][state] = settle_time
+                info["success"][state] = success
+
+            if self.sampler is not None:
+                for state in self.history["target"]:
+                    self.sampler.add_data_point("{}_target".format(state),
+                                                self.history["target"][state][0],
+                                                info["success"][state])
+
 
         return obs, reward, done, info
 
@@ -401,7 +421,10 @@ class FixedWingAircraft(gym.Env):
                 low = max(low, var_val - delta)
                 high = min(high, var_val + delta)
 
-            initial_value = self.np_random.uniform(low, high)
+            if self.sampler is None:
+                initial_value = self.np_random.uniform(low, high)
+            else:
+                initial_value = self.sampler.draw_sample("{}_target".format(target_var_name), (low, high))
             if var_props["class"] in "linear":
                 var_props["slope"] = self.np_random.uniform(props["slope_low"], props["slope_high"])
                 if self.np_random.uniform() < 0.5:
