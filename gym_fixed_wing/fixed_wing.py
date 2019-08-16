@@ -469,18 +469,20 @@ class FixedWingAircraft(gym.Env):
 
             self._target_props[target_var_name] = var_props
 
-    def render(self, mode="plot", close=True, block=False, save_path=None):
+    def render(self, mode="plot", show=True, close=True, block=False, save_path=None):
         """
         Visualize environment history. Plots of action and reward can be enabled through configuration file.
 
         :param mode: (str) render mode, one of plot for graph representation and animation for 3D animation with blender
+        :param show: (bool) if true, plt.show is called, if false the figure is returned
         :param close: (bool) if figure should be closed after showing, or reused for next render call
         :param block: (bool) block argument to matplotlib blocking script from continuing until figure is closed
         :param save_path (str) if given, render is saved to this path.
+        :return: (matplotlib Figure) if show is false in plot mode, the render figure is returned
         """
         if self.training and not self.render_on_reset:
             self.render_on_reset = True
-            self.render_on_reset_kw = {"mode": mode, "close": close, "save_path": save_path}
+            self.render_on_reset_kw = {"mode": mode, "show": show, "block": block, "close": close, "save_path": save_path}
             return
 
         if mode == "plot":
@@ -528,10 +530,13 @@ class FixedWingAircraft(gym.Env):
                 else:
                     plt.savefig(save_path, bbox_inches="tight")
 
-            plt.show(block=block)
+            if show:
+                plt.show(block=block)
 
-            if close:
-                self.viewer = None
+                if close:
+                    self.viewer = None
+            else:
+                return self.viewer["fig"]
 
         elif mode == "animation":
             raise NotImplementedError
