@@ -44,6 +44,8 @@ class FixedWingAircraft(gym.Env):
         self.steps_count = None
         self.steps_max = self.cfg["steps_max"]
         self._steps_for_current_target = None
+        self.goal_achieved = False
+
 
         self.viewer = None
 
@@ -175,6 +177,8 @@ class FixedWingAircraft(gym.Env):
 
         self.sampler = sampler
 
+        self.prev_shaping = {}
+
         self._schedule_level = None
         self.set_schedule_level(0)
 
@@ -273,6 +277,9 @@ class FixedWingAircraft(gym.Env):
             for state, status in self._get_goal_status().items():
                 self.history["goal"][state] = [status]
 
+        for rew_term in self.cfg["reward"]["terms"]:
+            self.prev_shaping[rew_term["function_class"]] = None
+
         return obs
 
     def step(self, action):
@@ -306,7 +313,6 @@ class FixedWingAircraft(gym.Env):
         self.steps_count += 1
         self._steps_for_current_target += 1
 
-        reward = self.get_reward()
         info = {}
         done = False
 
@@ -315,29 +321,34 @@ class FixedWingAircraft(gym.Env):
             info["termination"] = "steps"
 
         if step_success:
+            resample_target = False
+            goal_achieved_on_step = False
             if self.goal_enabled:
                 for state, status in self._get_goal_status().items():
                     self.history["goal"][state].append(status)
 
                 streak_req = self.cfg["target"]["success_streak_req"]
-                if self.cfg["target"]["on_success"] != "none" and self._steps_for_current_target >= streak_req and np.mean(self.history["goal"]["all"][-streak_req:]) >= self.cfg["target"]["success_streak_fraction"]:
-                    if self.cfg["target"]["success_reward"] == "timesteps":
-                        goal_reward = self.steps_max - self.steps_count
-                    else:
-                        goal_reward = self.cfg["target"]["success_reward"]
-
-                    reward += goal_reward
-
+                if self._steps_for_current_target >= streak_req \
+                        and np.mean(self.history["goal"]["all"][-streak_req:]) >= \
+                        self.cfg["target"]["success_streak_fraction"]:
+                    goal_achieved_on_step = not self.goal_achieved
+                    self.goal_achieved = True
                     if self.cfg["target"]["on_success"] == "done":
                         done = True
                         info["termination"] = "success"
                     elif self.cfg["target"]["on_success"] == "new":
-                        self.sample_target()
+                        resample_target = True
+                    elif self.cfg["target"]["on_success"] == "none":
+                        pass
                     else:
-                        raise Exception("Unexpected goal action {}".format(self.cfg["target"]["action"]))
+                        raise ValueError("Unexpected goal action {}".format(self.cfg["target"]["action"]))
+
+            reward = self.get_reward(action=self.history["action"][-1],
+                                     success=goal_achieved_on_step,
+                                     potential=self.cfg["reward"].get("form", "absolute") == "potential")
 
             resample_every = self.cfg["target"].get("resample_every", 0)
-            if resample_every and self._steps_for_current_target >= resample_every:
+            if resample_target or (resample_every and self._steps_for_current_target >= resample_every):
                 self.sample_target()
 
             for k, v in self._get_next_target().items():
@@ -350,11 +361,13 @@ class FixedWingAircraft(gym.Env):
             self.history["reward"].append(reward)
         else:
             done = True
+            reward_fail = self.cfg["reward"].get("step_fail", 0)
+            if reward_fail == "timesteps":
+                reward = self.steps_count - self.steps_max
+            else:
+                reward = reward_fail
             info["termination"] = step_info["termination"]
             obs = self.get_observation()
-
-        if self.action_outside_bounds_cost > 0:
-            reward -= np.sum(np.abs(action_rew_high)) + np.sum(np.abs(action_rew_low))
 
         if done:
             info["avg_errors"] = {k: np.abs(np.mean(v) / v[0]) if v[0] != 0 else np.nan for k, v in
@@ -531,58 +544,88 @@ class FixedWingAircraft(gym.Env):
                     res[state + "_target"] = self.history["target"][state]
             np.save(path, res)
 
-    def get_reward(self):
+    def get_reward(self, action, success=False, potential=False):
         """
         Get the reward for the current state of the environment.
 
         :return: (float) reward
         """
         reward = 0
-        terms = {term["function_class"]: {"val": 0, "weight": term["weight"]} for term in self.cfg["reward"]["terms"]}
+        terms = {term["function_class"]: {"val": 0, "weight": term["weight"], "val_shaping": 0} for term in self.cfg["reward"]["terms"]}
 
-        for component in self.cfg["reward"]["states"]:
-            if component["state"] == "action":
+        for component in self.cfg["reward"]["factors"]:
+            if component["class"] == "action":
                 if component["type"] == "value":
                     val = np.sum(np.abs(self.history["action"][-1]))
                 elif component["type"] == "delta":
                     if self.steps_count > 1:
-                        """
-                        vals = self.history[component["state"]]
-                        cur = vals[-1]
-                        past_avg = np.mean(vals[-(component["window_size"] + 1):-1], axis=0)
-                        val = np.sum(np.abs(cur - past_avg))
-                        """
-                        vals = self.history[component["state"]][-component["window_size"]:]
-                        distance = np.diff(vals, axis=0)
-                        val = np.sum(np.abs(distance))
+                        vals = self.history[component["name"]][-component["window_size"]:]
+                        deltas = np.diff(vals, axis=0)
+                        val = np.sum(np.abs(deltas))
                     else:
                         val = 0
-            elif component["type"] == "value":
-                val = self.simulator.state[component["state"]].value
-            elif component["type"] == "error":
-                val = self._get_error(component["state"])
-            elif component["type"] == "int_error":
-                val = np.sum(self.history["error"][component["state"]])
+                elif component["type"] == "bound":
+                    action_rew_high = np.where(action > self.action_bounds_max, action - self.action_bounds_max, 0) * \
+                                      self.action_outside_bounds_cost
+                    action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0) * \
+                                     self.action_outside_bounds_cost
+                    val = np.sum(np.abs(action_rew_high)) + np.sum(np.abs(action_rew_low))
+                else:
+                    raise ValueError("Unexpected type {} for reward class action".format(component["type"]))
+            elif component["class"] == "state":
+                if component["type"] == "value":
+                    val = self.simulator.state[component["name"]].value
+                elif component["type"] == "error":
+                    val = self._get_error(component["name"])
+                elif component["type"] == "int_error":
+                    val = np.sum(self.history["error"][component["name"]][-self.integration_window:])
+                    if self.steps_count < self.integration_window:
+                        val += (self.integration_window - self.steps_count) * self.history["error"][component["name"]][0]
+                else:
+                    raise ValueError("Unexpected reward type {} for class state".format(component["type"]))
+            elif component["class"] == "success":
+                if success:
+                    if component["value"] == "timesteps":
+                        val = (self.steps_max - self.steps_count)
+                    else:
+                        val = component["value"]
+                else:
+                    val = 0
             else:
-                raise ValueError("Unexpected reward component type {}".format(component["type"]))
+                raise ValueError("Unexpected reward component type {}".format(component["class"]))
 
             if component["function_class"] == "linear":
-                terms[component["function_class"]]["val"] -= np.clip(np.abs(val) / component["scaling"],
-                                                                     0,
-                                                                     component.get("max", None))
+                val = np.clip(np.abs(val) / component["scaling"], 0, component.get("max", None))
             elif component["function_class"] == "exponential":
-                terms[component["function_class"]]["val"] -= val ** 2 / component["scaling"]
+                val = val ** 2 / component["scaling"]
             else:
                 raise ValueError("Unexpected function class {} for {}".format(component["function_class"],
-                                                                              component["state"]))
+                                                                              component["name"]))
+
+            if component.get("shaping", False):
+                terms[component["function_class"]]["val_shaping"] += val * np.sign(component.get("sign", -1))
+            else:
+                terms[component["function_class"]]["val"] += val * np.sign(component.get("sign", -1))
 
         for term_class, term_info in terms.items():
             if term_class == "exponential":
-                val = -1 + np.exp(term_info["val"])
+                if potential:
+                    if self.prev_shaping[term_class] is not None:
+                        val = -1 + np.exp(term_info["val"] + (term_info["val_shaping"] - self.prev_shaping["exponential"]))
+                    else:
+                        val = -1 + np.exp(term_info["val"])
+                else:
+                    val = -1 + np.exp(term_info["val"] + term_info["val_shaping"])
             elif term_class == "linear":
                 val = term_info["val"]
+                if potential:
+                    if self.prev_shaping[term_class] is not None:
+                        val += term_info["val_shaping"] - self.prev_shaping[term_class]
+                else:
+                    val += term_info["val_shaping"]
             else:
                 raise ValueError("Unexpected function class {}".format(term_class))
+            self.prev_shaping[term_class] = term_info["val_shaping"]
             reward += term_info["weight"] * val
 
         return reward
