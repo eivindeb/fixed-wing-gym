@@ -366,6 +366,10 @@ class FixedWingAircraft(gym.Env):
         if done:
             info["avg_errors"] = {k: np.abs(np.mean(v) / v[0]) if v[0] != 0 else np.nan for k, v in
                                   self.history["error"].items()}
+
+            control_commands = np.array([self.simulator.state[actuator["name"]].history["command"] for actuator in self.cfg["action"]["states"]])
+            delta_controls = np.diff(control_commands, axis=1)
+            info["control_variation"] = np.sum(np.abs(delta_controls)) / (3 * self.simulator.dt * delta_controls.shape[1])
             info["settle_time"] = {}
             info["success"] = {}
             for state, goal_status in self.history["goal"].items():
