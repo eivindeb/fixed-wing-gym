@@ -293,13 +293,6 @@ class FixedWingAircraft(gym.Env):
 
         self.history["action"].append(action)
 
-        actuators = [a["name"] for a in self.cfg["action"]["states"]]
-
-        if self.action_outside_bounds_cost > 0:
-            action_rew_high = np.where(action > self.action_bounds_max, action - self.action_bounds_max, 0) *\
-                self.action_outside_bounds_cost
-            action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0) *\
-                self.action_outside_bounds_cost
         if self.scale_actions:
             action = self.linear_action_scaling(np.clip(action,
                                                         self.cfg["action"].get("scale_low"),
