@@ -175,6 +175,7 @@ class FixedWingAircraft(gym.Env):
         self.render_on_reset = False
         self.render_on_reset_kw = {}
         self.save_on_reset = False
+        self.save_on_reset_kw = {}
 
         self.sampler = sampler
 
@@ -257,8 +258,9 @@ class FixedWingAircraft(gym.Env):
             self.render_on_reset = False
             self.render_on_reset_kw = {}
         if self.save_on_reset:
-            self.save_history("test_hist_rl_eval.npy", ["roll", "pitch", "yaw", "Va"], save_targets=True)
+            self.save_history(**self.save_on_reset_kw)
             self.save_on_reset = False
+            self.save_on_reset_kw = {}
         self.steps_count = 0
         self.simulator.reset(state)
         self.sample_target()
@@ -546,9 +548,11 @@ class FixedWingAircraft(gym.Env):
         """
         if self.training and not self.save_on_reset:
             self.save_on_reset = True
+            self.save_on_reset_kw = {"path": path, "states": states, "save_targets": save_targets}
+            return
         self.simulator.save_history(path, states)
         if save_targets:
-            res = np.load(path).item()
+            res = np.load(path, allow_pickle=True).item()
             for state in self.target.keys():
                 if state in res:
                     res[state + "_target"] = self.history["target"][state]
