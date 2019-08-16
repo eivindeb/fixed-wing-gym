@@ -392,10 +392,22 @@ class FixedWingAircraft(gym.Env):
                                                 self.history["target"][state][0],
                                                 info["success"][state])
 
+                for state in ["roll", "pitch", "velocity_u"]:
+                    if state == "velocity_u":
+                        self.sampler.add_data_point(state, self.simulator.state["Va"].history[0], info["success"]["Va"])
+                    else:
+                        self.sampler.add_data_point(state, self.simulator.state[state].history[0], info["success"][state])
 
         return obs, reward, done, info
 
     def linear_action_scaling(self, a, direction="forward"):
+        """
+        Scale input linearly from config parameters scale_high and scale_low to maximum and minimum values of actuators
+        reported by PyFly, or vice versa depending on direction.
+        :param a: (np.array of float) action to scale
+        :param direction: (str) order of old and new minimums and maximums
+        :return: (np.array of float) scaled action
+        """
         if direction == "forward":
             new_max = self.action_scale_to_high
             new_min = self.action_scale_to_low
