@@ -1,5 +1,6 @@
 {
   "steps_max": 2000,
+  "integration_window": 500,
   "observation": {
     "length": 5,
     "step": 1,

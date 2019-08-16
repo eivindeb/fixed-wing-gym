@@ -46,6 +46,7 @@ class FixedWingAircraft(gym.Env):
         self._steps_for_current_target = None
         self.goal_achieved = False
 
+        self.integration_window = self.cfg.get("integration_window", 0)
 
         self.viewer = None
 
@@ -637,49 +638,54 @@ class FixedWingAircraft(gym.Env):
         :return: ([float]) observation vector
         """
         obs = []
-        action_index = {}
+        if self.scale_actions:
+            action_states = [state["name"] for state in self.cfg["action"]["states"]]
+            action_indexes = {state["name"]: action_states.index(state["name"]) for state in self.cfg["observation"]["states"] if state["type"] == "action"}
         step = self.cfg["observation"].get("step", 1)
+        init_noise = None
 
         for i in range(1, (self.cfg["observation"]["length"] + (1 if step == 1 else 0)) * step, step):
             obs_i = []
             if i > self.steps_count:
                 i = self.steps_count + 1
+                init_noise = self.np_random.uniform(-1, 1) * self.simulator.dt
             for obs_var in self.cfg["observation"]["states"]:
                 if obs_var["type"] == "state":
-                    obs_i.append(self.simulator.state[obs_var["name"]].history[-i])
+                    val = self.simulator.state[obs_var["name"]].history[-i]
                 elif obs_var["type"] == "target":
                     if obs_var["value"] == "relative":
-                        obs_i.append(self._get_error(obs_var["name"]) if i == 1 else self.history["error"][obs_var["name"]][-i])
+                        val = self._get_error(obs_var["name"]) if i == 1 else self.history["error"][obs_var["name"]][-i]
                     elif obs_var["value"] == "absolute":
-                        obs_i.append(self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i])
+                        val = self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i]
                     elif obs_var["value"] == "integrator":
                         if self.history is None:
-                            obs_i.append(self._get_error(obs_var["name"]))
+                            val = self._get_error(obs_var["name"]) * self.integration_window
                         else:
-                            obs_i.append(np.sum(self.history["error"][obs_var["name"]][:-i]))
+                            val = np.sum(self.history["error"][obs_var["name"]][-self.integration_window - i:-i])
+                            if self.steps_count - i < self.integration_window:
+                                val += (self.integration_window - (self.steps_count - i)) * self.history["error"][obs_var["name"]][0]
                     else:
                         raise ValueError("Unexpected observation variable target value type: {}".format(obs_var["value"]))
                 elif obs_var["type"] == "action":
-                    window_size = obs_var.get("window_size", 1)
                     if self.steps_count - i < 0:
+                        val = self.simulator.state[obs_var["name"]].value
                         if self.scale_actions:
-                            obs_i.append(0)
-                        else:
-                            obs_i.append(self.simulator.state[obs_var["name"]].value)
+                            a_i = action_indexes[obs_var["name"]]
+                            action = np.zeros(shape=(len(action_indexes)))[a_i] = val
+                            val = self.linear_action_scaling(action, direction="backward")[a_i]
                     else:
+                        window_size = obs_var.get("window_size", 1)
                         low_idx, high_idx = -window_size - i + 1, None if i == 1 else -(i - 1)
                         if self.scale_actions:
-                            try:
-                                a_i = action_index[obs_var["name"]]
-                            except:
-                                a_i = [action_var["name"] for action_var in self.cfg["action"]["states"]].index(obs_var["name"])
-                                action_index[obs_var["name"]] = a_i
-                            obs_i.append(np.sum(np.abs(np.diff([a[a_i] for a in self.history["action"][low_idx:high_idx]])), dtype=np.float32))
+                            a_i = action_indexes[obs_var["name"]]
+                            val = np.sum(np.abs(np.diff([a[a_i] for a in self.history["action"][low_idx:high_idx]])), dtype=np.float32)
                         else:
-                            obs_i.append(np.sum(np.abs(np.diff(self.simulator.state[obs_var["name"]].history["command"][low_idx:high_idx])), dtype=np.float32))
-
+                            val = np.sum(np.abs(np.diff(self.simulator.state[obs_var["name"]].history["command"][low_idx:high_idx])), dtype=np.float32)
                 else:
                     raise Exception("Unexpected observation variable type: {}".format(obs_var["type"]))
+                if init_noise is not None:  # TODO: maybe scale with state range?
+                    val += init_noise
+                obs_i.append(val)
             if self.cfg["observation"]["shape"] == "vector":
                 obs.extend(obs_i)
             elif self.cfg["observation"]["shape"] == "matrix":
