@@ -162,29 +162,11 @@
         "delta": [3, 4, 6],
         "class": "compensate",
         "bound": 2
-      },
-      {
-        "name": "omega_p",
-        "class": "attitude_angular",
-        "convert_to_radians": true,
-        "bound": 10
-      },
-      {
-        "name": "omega_q",
-        "class": "attitude_angular",
-        "convert_to_radians": true,
-        "bound": 10
-      },
-      {
-        "name": "omega_r",
-        "class": "attitude_angular",
-        "convert_to_radians": true,
-        "bound": 10
       }
     ]
   },
   "reward": {
-    "form": "potential",
+    "form": "absolute",
     "step_fail": "timesteps",
     "terms": [
       {

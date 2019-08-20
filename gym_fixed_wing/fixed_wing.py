@@ -245,6 +245,10 @@ class FixedWingAircraft(gym.Env):
                     low, high = attrs["low"], attrs["high"]
                 self.sampler.add_state("{}_target".format(state), state_range=(low, high))
 
+            for state_name in ["roll", "pitch", "velocity_u"]:
+                state = self.simulator.state[state_name]
+                self.sampler.add_state(state_name, (state.init_min, state.init_max))
+
     def reset(self, state=None, target=None):
         """
         Reset state of environment.
@@ -262,6 +266,10 @@ class FixedWingAircraft(gym.Env):
             self.save_on_reset = False
             self.save_on_reset_kw = {}
         self.steps_count = 0
+        if state is None and self.sampler is not None:
+            state = {}
+            for init_state in ["roll", "pitch", "velocity_u"]:
+                state[init_state] = self.sampler.draw_sample(init_state)
         self.simulator.reset(state)
         self.sample_target()
         if target is not None:
@@ -464,6 +472,10 @@ class FixedWingAircraft(gym.Env):
                 var_props["period"] = self.np_random.uniform(props.get("period_low", 250), props.get("period_high", 500))
                 var_props["phase"] = self.np_random.uniform(0, 2 * np.pi) / (2 * np.pi / var_props["period"])
                 var_props["bias"] = initial_value - var_props["amplitude"] * np.sin(2 * np.pi / var_props["period"] * (self.steps_count + var_props["phase"]))
+
+            bound = props.get("bound", None)
+            if bound is not None:
+                var_props["bound"] = bound if not convert_to_radians else np.radians(bound)
 
             self.target[target_var_name] = initial_value
 
@@ -746,12 +758,10 @@ class FixedWingAircraft(gym.Env):
         :return: (dict) status for each and all target states
         """
         goal_status = {}
-        for state, props in self._target_props_init["states"].items():
+        for state, props in self._target_props.items():
             bound = props.get("bound", None)
             if bound is not None:
                 err = self._get_error(state)
-                if props.get("convert_to_radians", False):
-                    bound = np.radians(bound)
                 goal_status[state] = np.abs(err) <= bound
 
         goal_status["all"] = all(goal_status.values())
