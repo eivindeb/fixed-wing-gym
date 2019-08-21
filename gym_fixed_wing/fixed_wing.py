@@ -159,7 +159,6 @@ class FixedWingAircraft(gym.Env):
         self.scale_actions = self.cfg["action"].get("scale_space", False)
 
         if self.cfg["action"].get("bounds_multiplier", None) is not None:
-            self.action_outside_bounds_cost = self.cfg["action"].get("bounds_outside_cost", 0)
             self.action_bounds_max = np.full(self.action_space.shape, self.cfg["action"].get("scale_high", 1)) *\
                                      self.cfg["action"]["bounds_multiplier"]
             self.action_bounds_min = np.full(self.action_space.shape, self.cfg["action"].get("scale_low", -1)) *\
@@ -596,10 +595,8 @@ class FixedWingAircraft(gym.Env):
                     else:
                         val = 0
                 elif component["type"] == "bound":
-                    action_rew_high = np.where(action > self.action_bounds_max, action - self.action_bounds_max, 0) * \
-                                      self.action_outside_bounds_cost
-                    action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0) * \
-                                     self.action_outside_bounds_cost
+                    action_rew_high = np.where(action > self.action_bounds_max, action - self.action_bounds_max, 0)
+                    action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0)
                     val = np.sum(np.abs(action_rew_high)) + np.sum(np.abs(action_rew_low))
                 else:
                     raise ValueError("Unexpected type {} for reward class action".format(component["type"]))
