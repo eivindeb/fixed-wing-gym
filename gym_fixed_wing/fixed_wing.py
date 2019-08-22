@@ -623,6 +623,10 @@ class FixedWingAircraft(gym.Env):
                         val = component["value"]
                 else:
                     val = 0
+            elif component["class"] == "step":
+                val = component["value"]
+            elif component["class"] == "goal":
+                val = component["value"] if self.history["goal"]["all"][-1] else 0  # TODO: maybe use get_goal_status instead
             else:
                 raise ValueError("Unexpected reward component type {}".format(component["class"]))
 

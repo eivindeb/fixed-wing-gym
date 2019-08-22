@@ -252,7 +252,23 @@
         "class": "success",
         "function_class": "linear",
         "scaling": 1,
-        "value": 0.5,
+        "value": 0,
+        "shaping": false,
+        "sign": 1
+      },
+      {
+        "class": "step",
+        "function_class": "linear",
+        "scaling": 1,
+        "value": 1,
+        "shaping": false,
+        "sign": -1
+      },
+      {
+        "class": "goal",
+        "function_class": "linear",
+        "scaling": 1,
+        "value": 1,
         "shaping": false,
         "sign": 1
       }
