@@ -376,8 +376,9 @@ class FixedWingAircraft(gym.Env):
             obs = self.get_observation()
 
         if done:
-            info["avg_errors"] = {k: np.abs(np.mean(v) / v[0]) if v[0] != 0 else np.nan for k, v in
+            info["avg_error"] = {k: np.abs(np.mean(v) / v[0]) if v[0] != 0 else np.nan for k, v in
                                   self.history["error"].items()}
+            info["end_error"] = {k: np.abs(np.mean(v[-50:])) for k, v in self.history["error"].items()}
 
             control_commands = np.array([self.simulator.state[actuator["name"]].history["command"] for actuator in self.cfg["action"]["states"]])
             delta_controls = np.diff(control_commands, axis=1)
