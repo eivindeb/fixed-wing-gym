@@ -34,6 +34,9 @@ class FixedWingAircraft(gym.Env):
         if config_kw is not None:
             set_config_attrs(self.cfg, config_kw)
 
+        if sim_config_kw is None:
+            sim_config_kw = {}
+        sim_config_kw.update({"actuation": {"inputs": [a_s["name"] for a_s in self.cfg["action"]["states"]]}})
         pyfly_kw = {"config_kw": sim_config_kw}
         if sim_config_path is not None:
             pyfly_kw["config_path"] = sim_config_path
