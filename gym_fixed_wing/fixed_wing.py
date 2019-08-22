@@ -634,6 +634,8 @@ class FixedWingAircraft(gym.Env):
                 val = np.clip(np.abs(val) / component["scaling"], 0, component.get("max", None))
             elif component["function_class"] == "exponential":
                 val = val ** 2 / component["scaling"]
+            elif component["function_class"] == "quadratic":
+                val = val ** 2 / component["scaling"]
             else:
                 raise ValueError("Unexpected function class {} for {}".format(component["function_class"],
                                                                               component["name"]))
@@ -652,7 +654,7 @@ class FixedWingAircraft(gym.Env):
                         val = -1 + np.exp(term_info["val"])
                 else:
                     val = -1 + np.exp(term_info["val"] + term_info["val_shaping"])
-            elif term_class == "linear":
+            elif term_class in ["linear", "quadratic"]:
                 val = term_info["val"]
                 if potential:
                     if self.prev_shaping[term_class] is not None:
