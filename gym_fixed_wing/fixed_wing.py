@@ -376,7 +376,7 @@ class FixedWingAircraft(gym.Env):
             obs = self.get_observation()
 
         if done:
-            info["avg_error"] = {k: np.abs(np.mean(v) / v[0]) if v[0] != 0 else np.nan for k, v in
+            info["avg_error"] = {k: np.abs(np.mean(v) / v[0]) if np.abs(v[0]) >= 0.1 else np.nan for k, v in
                                   self.history["error"].items()}
             info["end_error"] = {k: np.abs(np.mean(v[-50:])) for k, v in self.history["error"].items()}
 
