@@ -266,6 +266,7 @@
       },
       {
         "class": "goal",
+        "type": "all",
         "function_class": "linear",
         "scaling": 1,
         "value": 1,
