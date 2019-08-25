@@ -115,7 +115,7 @@ class FixedWingAircraft(gym.Env):
         action_high = []
         action_space_high = []
         for action_var in self.cfg["action"]["states"]:
-            space_high = action_var.pop("high", None)
+            space_high = action_var.get("high", None)
 
             state = self.simulator.state[action_var["name"]]
             if state.value_max is not None:
@@ -133,7 +133,7 @@ class FixedWingAircraft(gym.Env):
                 action_space_high.append(space_high)
             action_high.append(state_high)
 
-            space_low = action_var.pop("low", None)
+            space_low = action_var.get("low", None)
 
             if state.value_min is not None:
                 state_low = state.value_min
