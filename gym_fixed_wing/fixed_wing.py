@@ -578,7 +578,7 @@ class FixedWingAircraft(gym.Env):
                     res[state + "_target"] = self.history["target"][state]
             np.save(path, res)
 
-    def get_reward(self, action, success=False, potential=False):
+    def get_reward(self, action=None, success=False, potential=False):
         """
         Get the reward for the current state of the environment.
 
@@ -599,9 +599,12 @@ class FixedWingAircraft(gym.Env):
                     else:
                         val = 0
                 elif component["type"] == "bound":
-                    action_rew_high = np.where(action > self.action_bounds_max, action - self.action_bounds_max, 0)
-                    action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0)
-                    val = np.sum(np.abs(action_rew_high)) + np.sum(np.abs(action_rew_low))
+                    if action is not None:
+                        action_rew_high = np.where(action > self.action_bounds_max, action - self.action_bounds_max, 0)
+                        action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0)
+                        val = np.sum(np.abs(action_rew_high)) + np.sum(np.abs(action_rew_low))
+                    else:
+                        val = 0
                 else:
                     raise ValueError("Unexpected type {} for reward class action".format(component["type"]))
             elif component["class"] == "state":
