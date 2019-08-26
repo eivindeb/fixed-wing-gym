@@ -631,10 +631,12 @@ class FixedWingAircraft(gym.Env):
             elif component["class"] == "goal":
                 val = 0
                 if component["type"] == "per_state":
-                    for target_state in self.target:
-                        val += component["value"] / len(self.target) if self.history["goal"][target_state][-1] else 0
+                    for target_state, is_achieved in self._get_goal_status().items():
+                        if target_state == "all":
+                            continue
+                        val += component["value"] / len(self.target) if is_achieved else 0
                 elif component["type"] == "all":
-                    val += component["value"] if self.history["goal"]["all"][-1] else 0
+                    val += component["value"] if self._get_goal_status()["all"] else 0
                 else:
                     raise ValueError("Unexpected reward type {} for class goal".format(component["type"]))
             else:
