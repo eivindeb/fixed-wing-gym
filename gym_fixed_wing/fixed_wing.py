@@ -841,6 +841,64 @@ class FixedWingAircraft(gym.Env):
 
         return res
 
+
+class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
+    def __init__(self, config_path, sampler=None, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
+        super(FixedWingAircraftGoal, self).__init__(config_path=config_path,
+                                                sampler=sampler,
+                                                sim_config_path=sim_config_path,
+                                                sim_parameter_path=sim_parameter_path,
+                                                config_kw=config_kw,
+                                                sim_config_kw=sim_config_kw
+                                                )
+
+        assert self.cfg["reward"]["form"] != "potential"
+
+        self.goal_states = list(self._target_props_init["states"].keys())
+
+        self.observation_space = gym.spaces.Dict(dict(
+            desired_goal=gym.spaces.Box(-np.inf, np.inf, shape=(len(self.goal_states),), dtype="float32"),
+            achieved_goal=gym.spaces.Box(-np.inf, np.inf, shape=(len(self.goal_states),), dtype="float32"),
+            observation=self.observation_space
+        ))
+
+    def reset(self, state=None, target=None):
+        super(FixedWingAircraftGoal, self).reset()
+        return super(FixedWingAircraftGoal, self).reset(state, target)
+
+    def get_observation(self):
+        obs = super(FixedWingAircraftGoal, self).get_observation()
+
+        achieved_goal = np.array([self.simulator.state[goal_state].value for goal_state in self.goal_states])
+        desired_goal = np.array([self.target[state] for state in self.goal_states])
+
+        obs = dict(
+            desired_goal=desired_goal,
+            achieved_goal=achieved_goal,
+            observation=obs
+        )
+
+        return obs
+
+    def compute_reward(self, achieved_goal, desired_goal, info):
+        original_values = {"achieved": {}, "desired": {}}
+        for i, goal_state in enumerate(self.goal_states):
+            original_values["achieved"][goal_state] = self.simulator.state[goal_state].value
+            original_values["desired"][goal_state] = self.target[goal_state]
+            self.simulator.state[goal_state].value = achieved_goal[i]
+            self.target[goal_state] = desired_goal[i]
+
+        success = False  # TODO: dont know if i want to use this, is get_goal_status in any case
+
+        reward = super(FixedWingAircraftGoal, self).get_reward(action=None, success=success, potential=False)
+
+        for goal_state in original_values["achieved"]:
+            self.simulator.state[goal_state].value = original_values["achieved"][goal_state]
+            self.target[goal_state] = original_values["desired"][goal_state]
+
+        return reward
+
+
 if __name__ == "__main__":
     from pyfly.pid_controller import PIDController
 
