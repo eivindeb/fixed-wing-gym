@@ -56,10 +56,11 @@ class FixedWingAircraft(gym.Env):
         self.np_random = np.random.RandomState()
         self.obs_norm_mean_mask = []
         self.obs_norm = self.cfg["observation"].get("normalize", False)
+        self.obs_module_idxs = {"pi": [], "vf": []}
 
         obs_low = []
         obs_high = []
-        for obs_var in self.cfg["observation"]["states"]:
+        for i, obs_var in enumerate(self.cfg["observation"]["states"]):
             self.obs_norm_mean_mask.append(obs_var.get("mask_mean", False))
 
             high = obs_var.get("high", None)
@@ -108,6 +109,17 @@ class FixedWingAircraft(gym.Env):
                         obs_var["var"] = (high - low) / (4 ** 2)  # Rule of thumb for variance
                     else:
                         obs_var["var"] = 1
+
+            if obs_var.get("module", "all") != "all":
+                self.obs_module_idxs[obs_var["module"]].append(i)
+            else:
+                self.obs_module_idxs["pi"].append(i)
+                self.obs_module_idxs["vf"].append(i)
+
+        if self.obs_module_idxs["pi"] != self.obs_module_idxs["vf"]:
+            self.use_select_idxs = True
+        else:
+            self.use_select_idxs = False
 
         if self.cfg["observation"]["length"] > 1:
             if self.cfg["observation"]["shape"] == "vector":
