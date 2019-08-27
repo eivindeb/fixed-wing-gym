@@ -746,7 +746,7 @@ class FixedWingAircraft(gym.Env):
             else:
                 raise ValueError("Unexpected observation shape {}".format(self.cfg["observation"]["shape"]))
 
-        return obs
+        return np.array(obs)
 
     def _get_error(self, state):
         """
