@@ -55,6 +55,7 @@ class FixedWingAircraft(gym.Env):
 
         self.np_random = np.random.RandomState()
         self.obs_norm_mean_mask = []
+        self.obs_norm = self.cfg["observation"].get("normalize", False)
 
         obs_low = []
         obs_high = []
@@ -95,6 +96,18 @@ class FixedWingAircraft(gym.Env):
             else:
                 obs_high.append(high)
                 obs_low.append(low)
+
+            if self.obs_norm:
+                if obs_var.get("mean", None) is None:
+                    if high != np.finfo(np.float32).max and low != -np.finfo(np.float32).max:
+                        obs_var["mean"] = high - low
+                    else:
+                        obs_var["mean"] = 0
+                if obs_var.get("var", None) is None:
+                    if high != np.finfo(np.float32).max and low != -np.finfo(np.float32).max:
+                        obs_var["var"] = (high - low) / (4 ** 2)  # Rule of thumb for variance
+                    else:
+                        obs_var["var"] = 1
 
         if self.cfg["observation"]["length"] > 1:
             if self.cfg["observation"]["shape"] == "vector":
@@ -738,6 +751,9 @@ class FixedWingAircraft(gym.Env):
                     raise Exception("Unexpected observation variable type: {}".format(obs_var["type"]))
                 if init_noise is not None:  # TODO: maybe scale with state range?
                     val += init_noise
+                if self.obs_norm and obs_var.get("norm", True):
+                    val -= obs_var["mean"]
+                    val /= obs_var["var"]
                 obs_i.append(val)
             if self.cfg["observation"]["shape"] == "vector":
                 obs.extend(obs_i)

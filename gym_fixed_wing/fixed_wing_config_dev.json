@@ -2,106 +2,122 @@
   "steps_max": 2000,
   "integration_window": 500,
   "observation": {
-    "length": 5,
+    "length": 1,
     "step": 1,
-    "shape": "matrix",
+    "shape": "vector",
+    "normalize": true,
     "states": [
       {
         "name": "roll",
         "low": -180,
         "high": 180,
         "convert_to_radians": true,
-        "type": "state"
+        "type": "state",
+        "mean": 0,
+        "var": 0.3
       },
       {
         "name": "pitch",
         "low": -85,
         "high": 85,
         "convert_to_radians": true,
-        "type": "state"
+        "type": "state",
+        "mean": 0,
+        "var": 0.15
       },
       {
         "name": "Va",
-        "high": 60,
-        "type": "state"
-
+        "low": 0,
+        "high": 70,
+        "type": "state",
+        "mean": 21,
+        "var": 2
       },
       {
         "name": "omega_p",
         "low": -720,
         "high": 720,
         "convert_to_radians": true,
-        "type": "state"
+        "type": "state",
+        "mean": 0,
+        "var": 0.94
       },
       {
         "name": "omega_q",
         "low": -720,
         "high": 720,
         "convert_to_radians": true,
-        "type": "state"
+        "type": "state",
+        "mean": 0,
+        "var": 0.94
       },
       {
         "name": "omega_r",
         "low": -720,
         "high": 720,
         "convert_to_radians": true,
-        "type": "state"
+        "type": "state",
+        "mean": 0,
+        "var": 0.94
       },
       {
         "name": "roll",
         "type": "target",
         "value": "relative",
-        "mask_mean": true
+        "mean": 0,
+        "var": 0.16
       },
       {
         "name": "pitch",
         "type": "target",
         "value": "relative",
-        "mask_mean": true
+        "mean": 0,
+        "var": 0.05
       },
       {
         "name": "Va",
         "type": "target",
         "value": "relative",
-        "mask_mean": true
+        "mean": 0,
+        "var": 2
       },
       {
-        "name": "roll",
-        "type": "target",
-        "value": "integrator",
-        "mask_mean": true
+        "name": "alpha",
+        "type": "state",
+        "mean": 0,
+        "var": 0.1
       },
       {
-        "name": "pitch",
-        "type": "target",
-        "value": "integrator",
-        "mask_mean": true
-      },
-      {
-        "name": "Va",
-        "type": "target",
-        "value": "integrator",
-        "mask_mean": true
+        "name": "beta",
+        "type": "state",
+        "mean": 0,
+        "var": 0.1
       },
       {
         "name": "elevator",
         "type": "action",
-        "window_size": 5
+        "window_size": 5,
+        "norm": false,
+        "network": "vf"
       },
       {
         "name": "aileron",
         "type": "action",
-        "window_size": 5
+        "window_size": 5,
+        "norm": false,
+        "network": "vf"
       },
       {
         "name": "throttle",
         "type": "action",
-        "window_size": 5
+        "window_size": 5,
+        "norm": false,
+        "network": "vf"
       }
     ]
   },
   "action": {
-    "scale_space": true,
+    "scale_space": false,
     "scale_low": -1,
     "scale_high": 1,
     "bounds_multiplier": 1.5,
