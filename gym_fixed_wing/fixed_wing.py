@@ -547,11 +547,15 @@ class FixedWingAircraft(gym.Env):
 
             if show:
                 plt.show(block=block)
-
                 if close:
+                    plt.close(self.viewer["fig"])
                     self.viewer = None
             else:
-                return self.viewer["fig"]
+                if close:
+                    plt.close(self.viewer["fig"])
+                    self.viewer = None
+                else:
+                    return self.viewer["fig"]
 
         elif mode == "animation":
             raise NotImplementedError
