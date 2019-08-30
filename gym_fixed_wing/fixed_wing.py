@@ -402,7 +402,14 @@ class FixedWingAircraft(gym.Env):
                                   self.history["error"].items()}
 
             # TODO: should handle multiple targets
-            info["total_error"] = {k: np.sum(np.abs(v)) / np.sum(np.abs(np.array(self.history["target"][k][:-1]) - np.array(self._get_standard_trajectory(k)))) for k, v in self.history["error"].items()}
+            info["total_error"] = {}
+            for target_state, errors in self.history["error"].items():
+                target_values = np.array(self.history["target"][target_state])
+                std_traj = np.array(self._get_standard_trajectory(target_state))
+                step_min = min([len(errors), std_traj.shape[0], target_values.shape[0]])
+                trajectory_error = np.sum(np.abs(errors[:step_min]))
+                std_traj_error = np.sum(np.abs(target_values[:step_min] - std_traj[:step_min]))
+                info["total_error"][target_state] = trajectory_error / std_traj_error
 
             info["end_error"] = {k: np.abs(np.mean(v[-50:])) for k, v in self.history["error"].items()}
 
