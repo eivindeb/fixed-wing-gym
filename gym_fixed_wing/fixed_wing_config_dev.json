@@ -5,7 +5,7 @@
     "length": 1,
     "step": 1,
     "shape": "vector",
-    "normalize": true,
+    "normalize": false,
     "states": [
       {
         "name": "roll",
@@ -98,21 +98,21 @@
         "type": "action",
         "window_size": 5,
         "norm": false,
-        "network": "vf"
+        "module": "vf"
       },
       {
         "name": "aileron",
         "type": "action",
         "window_size": 5,
         "norm": false,
-        "network": "vf"
+        "module": "vf"
       },
       {
         "name": "throttle",
         "type": "action",
         "window_size": 5,
         "norm": false,
-        "network": "vf"
+        "module": "vf"
       }
     ]
   },
@@ -141,7 +141,7 @@
   },
   "target": {
     "resample_every": 0,
-    "success_streak_req": 100,
+    "success_streak_req": 50,
     "success_streak_fraction": 0.95,
     "on_success": "none",
     "states": [
@@ -183,6 +183,7 @@
   },
   "reward": {
     "form": "absolute",
+    "randomize_scaling": true,
     "step_fail": "timesteps",
     "terms": [
       {
@@ -196,7 +197,7 @@
         "class": "state",
         "type": "error",
         "function_class": "linear",
-        "scaling": 2.5,
+        "scaling": [1, 4],
         "shaping": true,
         "sign": -1
       },
@@ -205,7 +206,7 @@
         "class": "state",
         "type": "error",
         "function_class": "linear",
-        "scaling": 2.5,
+        "scaling": [1, 4],
         "shaping": true,
         "sign": -1
       },
@@ -214,7 +215,7 @@
         "class": "state",
         "type": "error",
         "function_class": "linear",
-        "scaling": 25,
+        "scaling": [15, 35],
         "shaping": true,
         "sign": -1
       },
@@ -224,7 +225,7 @@
         "type": "delta",
         "function_class": "linear",
         "window_size": 5,
-        "scaling": 45,
+        "scaling": [15, 60],
         "shaping": false,
         "sign": -1
       },
@@ -255,7 +256,7 @@
       },
       {
         "class": "goal",
-        "type": "all",
+        "type": "per_state",
         "function_class": "linear",
         "scaling": 1,
         "value": 1,

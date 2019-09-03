@@ -194,6 +194,7 @@ class FixedWingAircraft(gym.Env):
         self.target = None
         self._target_props = None
         self._target_props_init = None
+        self._rew_factors_init = copy.deepcopy(self.cfg["reward"]["factors"])
 
         self.training = False
         self.render_on_reset = False
@@ -312,6 +313,12 @@ class FixedWingAircraft(gym.Env):
 
         for rew_term in self.cfg["reward"]["terms"]:
             self.prev_shaping[rew_term["function_class"]] = None
+
+        if self.cfg["reward"].get("randomize_scaling", False):
+            for i, rew_factor in enumerate(self._rew_factors_init):
+                if isinstance(rew_factor["scaling"], list):
+                    low, high = rew_factor["scaling"]
+                    self.cfg["reward"]["factors"][i]["scaling"] = self.np_random.uniform(low, high)
 
         return obs
 
