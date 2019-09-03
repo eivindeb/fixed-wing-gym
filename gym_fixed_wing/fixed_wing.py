@@ -205,8 +205,8 @@ class FixedWingAircraft(gym.Env):
 
         self.prev_shaping = {}
 
-        self._schedule_level = None
-        self.set_schedule_level(0)
+        self._curriculum_level = None
+        self.set_curriculum_level(0)
 
     def seed(self, seed=None):
         """
@@ -218,14 +218,14 @@ class FixedWingAircraft(gym.Env):
         self.simulator.seed(seed)
         return [seed]
 
-    def set_schedule_level(self, level):
+    def set_curriculum_level(self, level):
         """
-        Set the schedule level of the environment, e.g. for starting with simple tasks and progressing to more difficult
+        Set the curriculum level of the environment, e.g. for starting with simple tasks and progressing to more difficult
         scenarios as the agent becomes increasingly proficient.
 
-        :param level: (int) the schedule level
+        :param level: (int) the curriculum level
         """
-        self._schedule_level = level
+        self._curriculum_level = level
         if "states" in self.cfg:
             for state in self.cfg["states"]:
                 state = copy.copy(state)
@@ -233,7 +233,7 @@ class FixedWingAircraft(gym.Env):
                 convert_to_radians = state.pop("convert_to_radians", False)
                 for prop, values in state.items():
                     if isinstance(values, list):
-                        val = values[self._schedule_level]
+                        val = values[self._curriculum_level]
                     else:
                         val = values
                     if convert_to_radians and val is not None:
@@ -250,17 +250,15 @@ class FixedWingAircraft(gym.Env):
                         if k == "name":
                             continue
                         if isinstance(v, list):
-                            self._target_props_init["states"][state_name][k] = v[self._schedule_level]
+                            self._target_props_init["states"][state_name][k] = v[self._curriculum_level]
                         else:
                             self._target_props_init["states"][state_name][k] = v
             else:
                 if isinstance(val, list):
-                    self._target_props_init[attr] = val[self._schedule_level]
+                    self._target_props_init[attr] = val[self._curriculum_level]
                 else:
                     self._target_props_init[attr] = val
 
-        # TODO: add support for setting state ranges (how to sync across threads, and make sure states are added only once?
-        # TODO: this will update state_range twice when loaded on higher level, and therefore do calculations twice unneccesarily
         if self.sampler is not None:
             for state, attrs in self._target_props_init["states"].items():
                 if attrs.get("convert_to_radians", False):
@@ -995,6 +993,7 @@ if __name__ == "__main__":
 
     env = FixedWingAircraft("fixed_wing_config.json", config_kw={"steps_max": 500})
     env.seed(0)
+    env.set_curriculum_level(2)
 
     obs = env.reset()
 
