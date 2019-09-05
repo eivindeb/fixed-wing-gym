@@ -962,8 +962,6 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
                                                 sim_config_kw=sim_config_kw
                                                 )
 
-        assert self.cfg["reward"]["form"] != "potential"
-
         self.goal_states = list(self._target_props_init["states"].keys())
 
         self.observation_space = gym.spaces.Dict(dict(
@@ -991,20 +989,45 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         return obs
 
     def compute_reward(self, achieved_goal, desired_goal, info):
-        original_values = {"achieved": {}, "desired": {}}
+        original_values = {"achieved": {}, "desired": {}, "action_history": copy.deepcopy(self.history["action"]),
+                           "steps_count": self.steps_count}
+
+        self.history["action"] = self.history["action"][:info["step"]] # TODO: this assumes that this function is called with transitions from the trajectory currently saved in the environment (might not work for multiprocessing etc., and if reset)
+        self.steps_count = info["step"]
+        success = False  # TODO: dont know if i want to use this, is get_goal_status in any case
+        action = info.get("action", None)
+
         for i, goal_state in enumerate(self.goal_states):
             original_values["achieved"][goal_state] = self.simulator.state[goal_state].value
             original_values["desired"][goal_state] = self.target[goal_state]
-            self.simulator.state[goal_state].value = achieved_goal[i]
             self.target[goal_state] = desired_goal[i]
 
-        success = False  # TODO: dont know if i want to use this, is get_goal_status in any case
+        potential = self.cfg["reward"]["form"] == "potential"
+        if potential:
+            original_values["prev_shaping"] = self.prev_shaping
+            if info["step"] > 0:
+                # Update prev_shaping to state before transition
+                prev_action = self.history["action"][-2] if len(self.history["action"]) >= 2 else None
+                for i, goal_state in enumerate(self.goal_states):
+                    self.simulator.state[goal_state].value = info["prev_state"][i]
+                _ = super(FixedWingAircraftGoal, self).get_reward(action=prev_action, success=success, potential=potential)
+            else:
+                for rew_term in self.cfg["reward"]["terms"]:
+                    self.prev_shaping[rew_term["function_class"]] = None
 
-        reward = super(FixedWingAircraftGoal, self).get_reward(action=None, success=success, potential=False)
+        for i, goal_state in enumerate(self.goal_states):
+            self.simulator.state[goal_state].value = achieved_goal[i]
+
+        reward = super(FixedWingAircraftGoal, self).get_reward(action=action, success=success, potential=potential)
 
         for goal_state in original_values["achieved"]:
             self.simulator.state[goal_state].value = original_values["achieved"][goal_state]
             self.target[goal_state] = original_values["desired"][goal_state]
+
+        self.history["action"] = original_values["action_history"]
+        self.steps_count = original_values["steps_count"]
+        if potential:
+            self.prev_shaping = original_values["prev_shaping"]
 
         return reward
 
