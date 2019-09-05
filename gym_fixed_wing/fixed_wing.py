@@ -207,6 +207,8 @@ class FixedWingAircraft(gym.Env):
         self.prev_shaping = {}
 
         self._curriculum_level = None
+        self.curriculum_level_max = None
+        self.use_curriculum = None
         self.set_curriculum_level(0)
 
     def seed(self, seed=None):
@@ -226,6 +228,13 @@ class FixedWingAircraft(gym.Env):
 
         :param level: (int) the curriculum level
         """
+        def get_maximum_curriculum_level(level, max):
+            if max is not None:
+                return min(max, level)
+            else:
+                return None
+        if self.curriculum_level_max is not None and level > self.curriculum_level_max:
+            raise ValueError("Max curriculum level is {}".format(self.curriculum_level_max))
         self._curriculum_level = level
         if "states" in self.cfg:
             for state in self.cfg["states"]:
@@ -234,6 +243,7 @@ class FixedWingAircraft(gym.Env):
                 convert_to_radians = state.pop("convert_to_radians", False)
                 for prop, values in state.items():
                     if isinstance(values, list):
+                        self.curriculum_level_max = get_maximum_curriculum_level(len(values), self.curriculum_level_max)
                         val = values[self._curriculum_level]
                     else:
                         val = values
@@ -251,14 +261,18 @@ class FixedWingAircraft(gym.Env):
                         if k == "name":
                             continue
                         if isinstance(v, list):
+                            self.curriculum_level_max = get_maximum_curriculum_level(len(values), self.curriculum_level_max)
                             self._target_props_init["states"][state_name][k] = v[self._curriculum_level]
                         else:
                             self._target_props_init["states"][state_name][k] = v
             else:
                 if isinstance(val, list):
+                    self.curriculum_level_max = get_maximum_curriculum_level(len(values), self.curriculum_level_max)
                     self._target_props_init[attr] = val[self._curriculum_level]
                 else:
                     self._target_props_init[attr] = val
+
+        self.use_curriculum = self.curriculum_level_max is not None
 
         if self.sampler is not None:
             for state, attrs in self._target_props_init["states"].items():
