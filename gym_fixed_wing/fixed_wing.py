@@ -261,7 +261,7 @@ class FixedWingAircraft(gym.Env):
                         if k == "name":
                             continue
                         if isinstance(v, list):
-                            self.curriculum_level_max = get_maximum_curriculum_level(len(values), self.curriculum_level_max)
+                            self.curriculum_level_max = get_maximum_curriculum_level(len(v), self.curriculum_level_max)
                             self._target_props_init["states"][state_name][k] = v[self._curriculum_level]
                         else:
                             self._target_props_init["states"][state_name][k] = v
