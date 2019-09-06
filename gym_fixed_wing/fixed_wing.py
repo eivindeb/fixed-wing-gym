@@ -753,7 +753,8 @@ class FixedWingAircraft(gym.Env):
             obs_i = []
             if i > self.steps_count:
                 i = self.steps_count + 1
-                init_noise = self.np_random.uniform(-1, 1) * self.simulator.dt
+                if self.cfg["observation"]["length"] > 1:
+                    init_noise = self.np_random.uniform(-1, 1) * self.simulator.dt
             for obs_var in self.cfg["observation"]["states"]:
                 if obs_var["type"] == "state":
                     val = self.simulator.state[obs_var["name"]].history[-i]
