@@ -148,34 +148,26 @@
       {
         "name": "roll",
         "convert_to_radians": true,
-        "low": [-20, -45, -60],
-        "high": [20, 45, 60],
-        "delta": [10, 45, 180],
+        "low": -60,
+        "high": 60,
+        "delta": 180,
         "class": "constant",
-        "bound": 3,
-        "amplitude_low": 160,
-        "amplitude_high": 160,
-        "period_low": 1000,
-        "period_high": 1000
+        "bound": 3
       },
       {
         "name": "pitch",
         "convert_to_radians": true,
-        "low": [-10, -20, -25],
-        "high": [10, 20, 25],
-        "delta": [5, 20, 45],
+        "low": -25,
+        "high": 25,
+        "delta": 45,
         "class": "constant",
-        "bound": 3,
-        "period_low": 300,
-        "period_high": 600,
-        "amplitude_low": 5,
-        "amplitude_high": 10
+        "bound": 3
       },
       {
         "name": "Va",
-        "low": [18, 14, 15],
-        "high": [23, 25, 28],
-        "delta": [3, 4, 6],
+        "low": 15,
+        "high": 28,
+        "delta": 6,
         "class": "compensate",
         "bound": 2
       }
@@ -197,7 +189,7 @@
         "class": "state",
         "type": "error",
         "function_class": "linear",
-        "scaling": [1, 4],
+        "scaling": 2.5,
         "shaping": true,
         "sign": -1
       },
@@ -206,7 +198,7 @@
         "class": "state",
         "type": "error",
         "function_class": "linear",
-        "scaling": [1, 4],
+        "scaling": 2.5,
         "shaping": true,
         "sign": -1
       },
@@ -215,7 +207,7 @@
         "class": "state",
         "type": "error",
         "function_class": "linear",
-        "scaling": [15, 35],
+        "scaling": 25,
         "shaping": true,
         "sign": -1
       },
@@ -225,7 +217,7 @@
         "type": "delta",
         "function_class": "linear",
         "window_size": 5,
-        "scaling": [15, 60],
+        "scaling": 60,
         "shaping": false,
         "sign": -1
       },
@@ -268,51 +260,51 @@
   "states": [
     {
       "name": "roll",
-      "init_min": [-30, -60, -110],
-      "init_max": [30, 60, 110],
+      "init_min": -110,
+      "init_max": 110,
       "convert_to_radians": true
     },
     {
       "name": "pitch",
-      "init_min": [-15, -30, -45],
-      "init_max": [15, 30, 45],
+      "init_min": -45,
+      "init_max": 45,
       "convert_to_radians": true
     },
     {
       "name": "velocity_u",
-      "init_min": [18, 12, 10],
-      "init_max": [23, 23, 23]
+      "init_min": 10,
+      "init_max": 23
     },
     {
       "name": "velocity_v",
-      "init_min": [0, -2.5, -5],
-      "init_max": [0, 2.5, 5]
+      "init_min": -5,
+      "init_max": 5
     },
     {
       "name": "velocity_w",
-      "init_min": [0, -2.5, -5],
-      "init_max": [0, 2.5, 5]
+      "init_min": -5,
+      "init_max": 5
     },
     {
       "name": "omega_p",
-      "init_min": [0, -30, -60],
-      "init_max": [0, 30, 60],
+      "init_min": -60,
+      "init_max": 60,
       "constraint_min": null,
       "constraint_max": null,
       "convert_to_radians": true
     },
     {
       "name": "omega_q",
-      "init_min": [0, -30, -60],
-      "init_max": [0, 30, 60],
+      "init_min": -60,
+      "init_max": 60,
       "constraint_min": null,
       "constraint_max": null,
       "convert_to_radians": true
     },
     {
       "name": "omega_r",
-      "init_min": [0, -30, -60],
-      "init_max": [0, 30, 60],
+      "init_min": -60,
+      "init_max": 60,
       "constraint_min": null,
       "constraint_max": null,
       "convert_to_radians": true
