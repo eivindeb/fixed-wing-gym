@@ -801,6 +801,22 @@ class FixedWingAircraft(gym.Env):
 
         return np.array(obs)
 
+    def get_initial_state(self):
+        res = {"state": {}, "target": {}}
+        for state_name, state_var in self.simulator.state.items():
+            if state_name == "attitude":
+                continue
+            if isinstance(state_var.history, dict):
+                res["state"][state_name] = state_var.history["value"][0]
+            elif state_var.history is None:
+                res["state"][state_name] = 0
+            else:
+                res["state"][state_name] = state_var.history[0]
+
+        res["target"] = {state: history[0] for state, history in self.history["target"].items()}
+
+        return res
+
     def _get_error(self, state):
         """
         Get difference between current value of state and target value.
