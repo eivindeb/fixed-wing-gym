@@ -1016,10 +1016,11 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         original_values = {"achieved": {}, "desired": {}, "action_history": copy.deepcopy(self.history["action"]),
                            "steps_count": self.steps_count}
 
+        action = info.get("action", np.array(np.zeros(shape=(len(self.cfg["action"]["states"])))))
         self.history["action"] = self.history["action"][:info["step"]] # TODO: this assumes that this function is called with transitions from the trajectory currently saved in the environment (might not work for multiprocessing etc., and if reset)
+        self.history["action"].append(action)
         self.steps_count = info["step"]
         success = False  # TODO: dont know if i want to use this, is get_goal_status in any case
-        action = info.get("action", None)
 
         for i, goal_state in enumerate(self.goal_states):
             original_values["achieved"][goal_state] = self.simulator.state[goal_state].value
