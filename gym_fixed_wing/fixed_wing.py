@@ -819,6 +819,14 @@ class FixedWingAircraft(gym.Env):
 
         return res
 
+    def get_random_initial_states(self, n_states):
+        obs, states = [], []
+        for i in range(n_states):
+            obs.append(env.reset())
+            states.append({"state": self.get_initial_state(), "target": self.target})
+
+        return obs, states
+
     def _get_error(self, state):
         """
         Get difference between current value of state and target value.
