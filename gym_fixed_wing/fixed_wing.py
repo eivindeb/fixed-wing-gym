@@ -448,6 +448,8 @@ class FixedWingAircraft(gym.Env):
                 info["settle_time"][state] = settle_time
                 info["success"][state] = success
 
+            info["success_time_frac"] = {k: np.mean(v) for k, v in self.history["goal"].items()}
+
             if self.sampler is not None:
                 for state in self.history["target"]:
                     self.sampler.add_data_point("{}_target".format(state),
