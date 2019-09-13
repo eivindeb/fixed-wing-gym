@@ -986,13 +986,20 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
                                                 sim_config_kw=sim_config_kw
                                                 )
 
-        self.goal_states = list(self._target_props_init["states"].keys())
+        self.goal_states = [goal["name"] for goal in self.cfg["observation"]["goals"]]
+        self.goal_means = np.array([goal["mean"] for goal in self.cfg["observation"]["goals"]])
+        self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
 
         self.observation_space = gym.spaces.Dict(dict(
             desired_goal=gym.spaces.Box(-np.inf, np.inf, shape=(len(self.goal_states),), dtype="float32"),
             achieved_goal=gym.spaces.Box(-np.inf, np.inf, shape=(len(self.goal_states),), dtype="float32"),
             observation=self.observation_space
         ))
+
+        for module in ["pi", "vf"]:
+            self.obs_module_indices[module].extend(list(
+                range(len(self.cfg["observation"]["states"]),
+                len(self.cfg["observation"]["states"]) + 2 * len(self.goal_states))))
 
     def reset(self, state=None, target=None):
         super(FixedWingAircraftGoal, self).reset()
@@ -1001,8 +1008,9 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
     def get_observation(self):
         obs = super(FixedWingAircraftGoal, self).get_observation()
 
-        achieved_goal = np.array([self.simulator.state[goal_state].value for goal_state in self.goal_states])
-        desired_goal = np.array([self.target[state] for state in self.goal_states])
+        achieved_goal = (np.array([self.simulator.state[goal_state].value for goal_state in self.goal_states])
+                         - self.goal_means) / self.goal_vars
+        desired_goal = (np.array([self.target[state] for state in self.goal_states]) - self.goal_means) / self.goal_vars
 
         obs = dict(
             desired_goal=desired_goal,
@@ -1012,9 +1020,25 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
 
         return obs
 
+    def get_goal_limits(self):
+        low, high = [], []
+        for i, goal_state in enumerate(self.goal_states):
+            goal_cfg = [state for state in self.cfg["target"]["states"] if state["name"] == goal_state][0]
+            l, h = goal_cfg["low"], goal_cfg["high"]
+            if goal_cfg.get("convert_to_radians", False):
+                l, h = np.radians(l), np.radians(h)
+            l, h = (l - self.goal_means[i]) / self.goal_vars[i], (h - self.goal_means[i]) / self.goal_vars[i]
+            low.append(l)
+            high.append(h)
+
+        return np.array(low), np.array(high)
+
     def compute_reward(self, achieved_goal, desired_goal, info):
         original_values = {"achieved": {}, "desired": {}, "action_history": copy.deepcopy(self.history["action"]),
                            "steps_count": self.steps_count}
+
+        achieved_goal = achieved_goal * self.goal_vars + self.goal_means
+        desired_goal = desired_goal * self.goal_vars + self.goal_means
 
         action = info.get("action", np.array(np.zeros(shape=(len(self.cfg["action"]["states"])))))
         self.history["action"] = self.history["action"][:info["step"]] # TODO: this assumes that this function is called with transitions from the trajectory currently saved in the environment (might not work for multiprocessing etc., and if reset)
