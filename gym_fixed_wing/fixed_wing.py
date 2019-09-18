@@ -991,7 +991,7 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
 
         if len(self.observation_space.shape) == 1:
-            goal_space_shape = (len(self.goal_states,))
+            goal_space_shape = (len(self.goal_states),)
         else:
             goal_space_shape = (self.observation_space.shape[0], len(self.goal_states))
         self.observation_space = gym.spaces.Dict(dict(
