@@ -990,9 +990,13 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         self.goal_means = np.array([goal["mean"] for goal in self.cfg["observation"]["goals"]])
         self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
 
+        if len(self.observation_space.shape) == 1:
+            goal_space_shape = (len(self.goal_states,))
+        else:
+            goal_space_shape = (self.observation_space.shape[0], len(self.goal_states))
         self.observation_space = gym.spaces.Dict(dict(
-            desired_goal=gym.spaces.Box(-np.inf, np.inf, shape=(len(self.goal_states),), dtype="float32"),
-            achieved_goal=gym.spaces.Box(-np.inf, np.inf, shape=(len(self.goal_states),), dtype="float32"),
+            desired_goal=gym.spaces.Box(-np.inf, np.inf, shape=goal_space_shape, dtype="float32"),
+            achieved_goal=gym.spaces.Box(-np.inf, np.inf, shape=goal_space_shape, dtype="float32"),
             observation=self.observation_space
         ))
 
@@ -1006,11 +1010,17 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         return super(FixedWingAircraftGoal, self).reset(state, target)
 
     def get_observation(self):
+        def scale_goal_states(states, m, v):
+            states = np.array(states)
+            return (states - m) / v
         obs = super(FixedWingAircraftGoal, self).get_observation()
 
-        achieved_goal = (np.array([self.simulator.state[goal_state].value for goal_state in self.goal_states])
-                         - self.goal_means) / self.goal_vars
-        desired_goal = (np.array([self.target[state] for state in self.goal_states]) - self.goal_means) / self.goal_vars
+        # TODO: might have to do some smart pattern thing here
+        achieved_goal = scale_goal_states([self.simulator.state[goal_state].value for goal_state in self.goal_states], self.goal_means, self.goal_vars)
+        desired_goal = scale_goal_states([self.target[state] for state in self.goal_states], self.goal_means, self.goal_vars)
+        if self.cfg["observation"]["length"] > 1:
+            achieved_goal = np.repeat(achieved_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
+            desired_goal = np.repeat(desired_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
 
         obs = dict(
             desired_goal=desired_goal,
