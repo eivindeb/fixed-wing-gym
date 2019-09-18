@@ -467,7 +467,7 @@ class FixedWingAircraft(gym.Env):
     def linear_action_scaling(self, a, direction="forward"):
         """
         Scale input linearly from config parameters scale_high and scale_low to maximum and minimum values of actuators
-        reported by PyFly, or vice versa depending on direction.
+        reported by PyFly when direction is forward, or vice versa if direction is backward.
         :param a: (np.array of float) action to scale
         :param direction: (str) order of old and new minimums and maximums
         :return: (np.array of float) scaled action
