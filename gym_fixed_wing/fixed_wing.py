@@ -747,6 +747,7 @@ class FixedWingAircraft(gym.Env):
             action_indexes = {state["name"]: action_states.index(state["name"]) for state in self.cfg["observation"]["states"] if state["type"] == "action"}
         step = self.cfg["observation"].get("step", 1)
         init_noise = None
+        noise = self.cfg["observation"].get("noise", None)
 
         for i in range(1, (self.cfg["observation"]["length"] + (1 if step == 1 else 0)) * step, step):
             obs_i = []
@@ -793,6 +794,8 @@ class FixedWingAircraft(gym.Env):
                 if self.obs_norm and obs_var.get("norm", True):
                     val -= obs_var["mean"]
                     val /= obs_var["var"]
+                if noise is not None:
+                    val += self.np_random.normal(loc=noise["mean"], scale=noise["std"])
                 obs_i.append(val)
             if self.cfg["observation"]["shape"] == "vector":
                 obs.extend(obs_i)

@@ -6,6 +6,10 @@
     "step": 1,
     "shape": "vector",
     "normalize": false,
+    "noise": {
+      "mean": 0,
+      "std": 0.1
+    },
     "states": [
       {
         "name": "roll",
