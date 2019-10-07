@@ -220,7 +220,7 @@ class FixedWingAircraft(gym.Env):
         self.simulator.seed(seed)
         return [seed]
 
-    def set_curriculum_level(self, level):
+    def set_curriculum_level(self, level):  # TODO: implement parameters also?
         """
         Set the curriculum level of the environment, e.g. for starting with simple tasks and progressing to more difficult
         scenarios as the agent becomes increasingly proficient.
@@ -229,8 +229,8 @@ class FixedWingAircraft(gym.Env):
         """
         assert 0 <= level <= 1
         self._curriculum_level = level
-        if "states" in self.cfg:
-            for state in self.cfg["states"]:
+        if "states" in self.cfg["simulator"]:
+            for state in self.cfg["simulator"]["states"]:
                 state = copy.copy(state)
                 state_name = state.pop("name")
                 convert_to_radians = state.pop("convert_to_radians", False)
@@ -305,6 +305,7 @@ class FixedWingAircraft(gym.Env):
             for init_state in ["roll", "pitch", "velocity_u"]:
                 state[init_state] = self.sampler.draw_sample(init_state)
         self.simulator.reset(state)
+        self.sample_simulator_parameters()
         self.sample_target()
         if target is not None:
             for k, v in target.items():
@@ -534,6 +535,51 @@ class FixedWingAircraft(gym.Env):
             self.target[target_var_name] = initial_value
 
             self._target_props[target_var_name] = var_props
+
+    def sample_simulator_parameters(self):
+        """
+        Sample and set variables and parameters (of UAV mathematical model) of simulator, as specified by simulator
+        block in config file.
+        :return:
+        """
+        for key, value in self.cfg["simulator"].items():
+            if key == "states":
+                continue  # PyFly has its own state randomization procedures
+            elif key == "model":
+                dist_type = value.get("distribution", "gaussian")
+                for param_arguments in value["parameters"]:
+                    orig_param_value = param_arguments.get("original", None)
+                    if orig_param_value is None:
+                        orig_param_value = self.simulator.params[param_arguments["name"]]
+                        param_arguments["original"] = orig_param_value
+
+                    var = param_arguments["var"]
+                    if value["var_type"] == "relative":
+                        var *= orig_param_value
+                    if dist_type == "gaussian":
+                        param_value = self.np_random.normal(loc=orig_param_value, scale=var)
+                        clip = param_arguments.get("clip", None)
+                        if clip is not None:
+                            if value["var_type"] == "relative":
+                                clip *= orig_param_value
+                            param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
+                    elif dist_type == "uniform":
+                        param_value = self.np_random.uniform(low=orig_param_value - var, high=orig_param_value + var)
+                    else:
+                        raise ValueError("Unexpected distribution type {}".format(dist_type))
+
+                    self.simulator.params[param_arguments["name"]] = param_value
+            else:
+                if "values" in value:
+                    probs = value.get("probabilities", None)
+                    if probs is not None:
+                        probs = np.array(probs)
+                    val = self.np_random.choice(value["values"], p=probs)
+                else:
+                    val = self.np_random.uniform(value["low"], value["high"])
+                    if isinstance(value["low"], bool):
+                        val = bool(val)
+                setattr(self.simulator, key, val)
 
     def render(self, mode="plot", show=True, close=True, block=False, save_path=None):
         """

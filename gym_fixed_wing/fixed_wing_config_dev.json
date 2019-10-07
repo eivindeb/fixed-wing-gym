@@ -261,59 +261,75 @@
       }
     ]
   },
-  "states": [
-    {
-      "name": "roll",
-      "init_min": -110,
-      "init_max": 110,
-      "convert_to_radians": true
+  "simulator": {
+    "states": [
+      {
+        "name": "roll",
+        "init_min": -110,
+        "init_max": 110,
+        "convert_to_radians": true
+      },
+      {
+        "name": "pitch",
+        "init_min": -45,
+        "init_max": 45,
+        "convert_to_radians": true
+      },
+      {
+        "name": "velocity_u",
+        "init_min": 10,
+        "init_max": 23
+      },
+      {
+        "name": "velocity_v",
+        "init_min": -5,
+        "init_max": 5
+      },
+      {
+        "name": "velocity_w",
+        "init_min": -5,
+        "init_max": 5
+      },
+      {
+        "name": "omega_p",
+        "init_min": -60,
+        "init_max": 60,
+        "constraint_min": null,
+        "constraint_max": null,
+        "convert_to_radians": true
+      },
+      {
+        "name": "omega_q",
+        "init_min": -60,
+        "init_max": 60,
+        "constraint_min": null,
+        "constraint_max": null,
+        "convert_to_radians": true
+      },
+      {
+        "name": "omega_r",
+        "init_min": -60,
+        "init_max": 60,
+        "constraint_min": null,
+        "constraint_max": null,
+        "convert_to_radians": true
+      }
+    ],
+    "model": {
+      "var_type": "relative",
+      "parameters": [
+      {
+        "name": "C_D_alpha1",
+        "var": 0.05,
+        "clip": 0.1
+      }
+    ]
     },
-    {
-      "name": "pitch",
-      "init_min": -45,
-      "init_max": 45,
-      "convert_to_radians": true
-    },
-    {
-      "name": "velocity_u",
-      "init_min": 10,
-      "init_max": 23
-    },
-    {
-      "name": "velocity_v",
-      "init_min": -5,
-      "init_max": 5
-    },
-    {
-      "name": "velocity_w",
-      "init_min": -5,
-      "init_max": 5
-    },
-    {
-      "name": "omega_p",
-      "init_min": -60,
-      "init_max": 60,
-      "constraint_min": null,
-      "constraint_max": null,
-      "convert_to_radians": true
-    },
-    {
-      "name": "omega_q",
-      "init_min": -60,
-      "init_max": 60,
-      "constraint_min": null,
-      "constraint_max": null,
-      "convert_to_radians": true
-    },
-    {
-      "name": "omega_r",
-      "init_min": -60,
-      "init_max": 60,
-      "constraint_min": null,
-      "constraint_max": null,
-      "convert_to_radians": true
+    "dt": {
+      "low": 0.03,
+      "high": 0.1
     }
-  ],
+  },
   "render": {
     "plot_action": false,
     "plot_reward": true,
