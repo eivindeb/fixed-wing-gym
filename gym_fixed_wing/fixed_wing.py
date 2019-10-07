@@ -547,18 +547,20 @@ class FixedWingAircraft(gym.Env):
                 continue  # PyFly has its own state randomization procedures
             elif key == "model":
                 dist_type = value.get("distribution", "gaussian")
+                param_value_var = value["var"]
+                param_value_clip = value.get("clip", None)
                 for param_arguments in value["parameters"]:
                     orig_param_value = param_arguments.get("original", None)
                     if orig_param_value is None:
                         orig_param_value = self.simulator.params[param_arguments["name"]]
                         param_arguments["original"] = orig_param_value
 
-                    var = param_arguments["var"]
+                    var = param_arguments.get("var", param_value_var)
                     if value["var_type"] == "relative":
-                        var *= orig_param_value
+                        var *= np.abs(orig_param_value)
                     if dist_type == "gaussian":
                         param_value = self.np_random.normal(loc=orig_param_value, scale=var)
-                        clip = param_arguments.get("clip", None)
+                        clip = param_arguments.get("clip", param_value_clip)
                         if clip is not None:
                             if value["var_type"] == "relative":
                                 clip *= orig_param_value
