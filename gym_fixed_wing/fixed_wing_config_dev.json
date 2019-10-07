@@ -8,7 +8,7 @@
     "normalize": false,
     "noise": {
       "mean": 0,
-      "std": 0.1
+      "var": 0.1
     },
     "states": [
       {

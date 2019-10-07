@@ -843,7 +843,7 @@ class FixedWingAircraft(gym.Env):
                     val -= obs_var["mean"]
                     val /= obs_var["var"]
                 if noise is not None:
-                    val += self.np_random.normal(loc=noise["mean"], scale=noise["std"])
+                    val += self.np_random.normal(loc=noise["mean"], scale=noise["var"])
                 obs_i.append(val)
             if self.cfg["observation"]["shape"] == "vector":
                 obs.extend(obs_i)
