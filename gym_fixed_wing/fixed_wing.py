@@ -878,6 +878,13 @@ class FixedWingAircraft(gym.Env):
 
         return obs, states
 
+    def get_simulator_parameters(self):
+        res = []
+        for param in self.cfg["simulator"]["model"]["parameters"]:
+            res.append(self.simulator.params[param["name"]])
+
+        return res
+
     def _get_error(self, state):
         """
         Get difference between current value of state and target value.
