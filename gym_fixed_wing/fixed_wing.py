@@ -1,6 +1,6 @@
 import gym
 from gym.utils import seeding
-from pyfly.pyfly import PyFly
+#from pyfly.pyfly import PyFly
 import json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -341,7 +341,6 @@ class FixedWingAircraft(gym.Env):
         :param action: ([float]) the action chosen by the agent
         :return: ([float], float, bool, dict) observation vector, reward, done, extra information about episode on done
         """
-
         self.history["action"].append(action)
 
         if self.scale_actions:
@@ -495,8 +494,16 @@ class FixedWingAircraft(gym.Env):
 
         self.target = {}
         self._target_props = {}
+
+        ang_targets = False
         for target_var_name, props in self._target_props_init["states"].items():
             var_props = {"class": props.get("class", "constant")}
+
+            if var_props["class"] == "attitude_angular":
+                self.target[target_var_name] = 0
+                self._target_props[target_var_name] = props
+                ang_targets = True
+                continue
 
             delta = props.get("delta", None)
             convert_to_radians = props.get("convert_to_radians", False)
@@ -535,6 +542,11 @@ class FixedWingAircraft(gym.Env):
             self.target[target_var_name] = initial_value
 
             self._target_props[target_var_name] = var_props
+
+        if ang_targets:
+            assert "roll" in self.target and "pitch" in self.target
+            ang_rates = ["omega_q", "omega_r", "omega_p"]
+            self.target.update({state: self._attitude_to_angular_rates(state) for state in ang_rates})
 
     def sample_simulator_parameters(self):
         """
@@ -594,6 +606,7 @@ class FixedWingAircraft(gym.Env):
         :param save_path (str) if given, render is saved to this path.
         :return: (matplotlib Figure) if show is false in plot mode, the render figure is returned
         """
+        # TODO: handle render call on reset env
         if self.training and not self.render_on_reset:
             self.render_on_reset = True
             self.render_on_reset_kw = {"mode": mode, "show": show, "block": block, "close": close, "save_path": save_path}
@@ -825,7 +838,8 @@ class FixedWingAircraft(gym.Env):
                         val = self.simulator.state[obs_var["name"]].value
                         if self.scale_actions:
                             a_i = action_indexes[obs_var["name"]]
-                            action = np.zeros(shape=(len(action_indexes)))[a_i] = val
+                            action = np.zeros(shape=(len(action_indexes)))
+                            action[a_i] = val
                             val = self.linear_action_scaling(action, direction="backward")[a_i]
                     else:
                         window_size = obs_var.get("window_size", 1)
@@ -976,6 +990,10 @@ class FixedWingAircraft(gym.Env):
                 res[state] = self.target[state] + props["slope"] * self.simulator.dt
             elif var_class == "sinusoidal":
                 res[state] = props["amplitude"] * np.sin(2 * np.pi / props["period"] * (self.steps_count + props["phase"])) + props["bias"]
+            elif var_class == "attitude_angular":
+                if state not in ["omega_p", "omega_q", "omega_r"]:
+                    raise ValueError("Invalid state for class attitude_angular {}".format(state))
+                res[state] = self._attitude_to_angular_rates(state)
             else:
                 raise ValueError
 
@@ -1032,6 +1050,59 @@ class FixedWingAircraft(gym.Env):
             raise ValueError("Non target state {} in _get_standard_trajectory".format(state))
 
         return values
+
+    def _attitude_to_angular_rates(self, state):
+        max_vel = self._target_props[state].get("max_vel", np.radians(180))
+
+        roll_angle = self.simulator.state["roll"].value
+        pitch_angle = self.simulator.state["pitch"].value
+
+        roll_error = self._get_error("roll")
+        pitch_error = self._get_error("pitch")
+
+        # TODO: Evenly distribute between q and r or randomly?
+        # TODO: stop angular rates from oscillating between positive and negative when roll angle is maximal
+
+        q_weight_pitch = np.cos(roll_angle)
+        r_weight_pitch = np.sin(roll_angle)
+
+        max_pitch_change = max_vel * self.simulator.dt * (q_weight_pitch + r_weight_pitch)
+
+        if state == "omega_p":
+            if roll_error <= np.radians(0.1):
+                damping = 0.05
+            #damping = ((np.abs(roll_error / (0.5 * np.pi))) ** 2) / (np.abs(roll_error / (0.5 * np.pi)))
+            damping = np.abs(roll_error / (0.5 * np.pi))
+            q_roll = np.sin(roll_angle) * np.tan(pitch_angle) * self.target["omega_q"] * self.simulator.dt
+            r_roll = np.cos(roll_angle) * np.tan(pitch_angle) * self.target["omega_r"] * self.simulator.dt
+            res = np.clip(-(roll_error - q_roll - r_roll) / self.simulator.dt, -max_vel, max_vel)
+        elif state == "omega_q":
+            if pitch_error <= np.radians(0.1):
+                damping = 0.05
+            #damping = ((np.abs(pitch_error / (0.5 * np.pi))) ** 2) / (np.abs(pitch_error / (0.5 * np.pi)))
+            damping = np.abs(pitch_error / (0.5 * np.pi))
+            if max_pitch_change > np.abs(pitch_error):
+                res = - pitch_error / (2 * q_weight_pitch)
+            else:
+                res = np.sign(q_weight_pitch) * max_vel * np.sign(pitch_error)
+        elif state == "omega_r":
+            if pitch_error <= np.radians(0.1):
+                damping = 0.05
+            #damping = ((np.abs(pitch_error / (0.5 * np.pi))) ** 2) / (np.abs(pitch_error / (0.5 * np.pi)))
+            damping = np.abs(pitch_error / (0.5 * np.pi))
+            if max_pitch_change > np.abs(pitch_error):
+                res = pitch_error / r_weight_pitch
+            else:
+                res = - np.sign(r_weight_pitch) * max_vel * np.sign(pitch_error)
+
+        if np.isnan(damping):
+            damping = 0.05
+        else:
+            damping = min(1, damping)
+
+        res = np.clip(self.target[state] + (res * damping - self.target[state]) * 1 / 20, -max_vel, max_vel)
+
+        return res
 
 
 class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
@@ -1150,16 +1221,24 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
 
 
 if __name__ == "__main__":
+    # TODO FIX THIS HACK
+    import sys
+    sys.path.append("/home/eivind/Documents/dev/pyfly")
+    from pyfly.pyfly import PyFly
     from pyfly.pid_controller import PIDController
 
-    env = FixedWingAircraft("fixed_wing_config.json", config_kw={"steps_max": 500})
+    env = FixedWingAircraft("fixed_wing_config_dev.json", config_kw={"steps_max": 500})
     env.seed(0)
-    env.set_curriculum_level(2)
+    env.set_curriculum_level(0.5)
 
+    #obs = env.reset(state={"roll": np.radians(30), "pitch": np.radians(5), "velocity_u": 25, "throttle": 0, "velocity_v": 0, "velocity_w": 0,
+    #                       "omega_p": 0, "omega_q": 0, "omega_r": 0, "elevon_right": 0, "elevon_left": 0},
+    #                target={"roll": np.radians(0), "pitch": np.radians(20), "Va": 20})
     obs = env.reset()
 
     pid = PIDController(env.simulator.dt)
     done = False
+
     while not done:
         pid.set_reference(env.target["roll"], env.target["pitch"], env.target["Va"])
         phi = env.simulator.state["roll"].value
@@ -1169,6 +1248,7 @@ if __name__ == "__main__":
 
         action = pid.get_action(phi, theta, Va, omega)
         obs, rew, done, info = env.step(action)
-
     env.render(block=True)
+else:
+    from pyfly.pyfly import PyFly
 

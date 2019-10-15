@@ -67,21 +67,21 @@
       {
         "name": "roll",
         "type": "target",
-        "value": "relative",
+        "value": "absolute",
         "mean": 0,
         "var": 0.16
       },
       {
         "name": "pitch",
         "type": "target",
-        "value": "relative",
+        "value": "absolute",
         "mean": 0,
         "var": 0.05
       },
       {
         "name": "Va",
         "type": "target",
-        "value": "relative",
+        "value": "absolute",
         "mean": 0,
         "var": 2
       },
