@@ -568,7 +568,7 @@ class FixedWingAircraft(gym.Env):
                         param_arguments["original"] = orig_param_value
 
                     var = param_arguments.get("var", param_value_var)
-                    if value["var_type"] == "relative":
+                    if value["var_type"] == "relative": # TODO: what about zero initial value?
                         var *= np.abs(orig_param_value)
                     if dist_type == "gaussian":
                         param_value = self.np_random.normal(loc=orig_param_value, scale=var)
@@ -892,10 +892,17 @@ class FixedWingAircraft(gym.Env):
 
         return obs, states
 
-    def get_simulator_parameters(self):
+    def get_simulator_parameters(self, normalize=True):
         res = []
         for param in self.cfg["simulator"]["model"]["parameters"]:
-            res.append(self.simulator.params[param["name"]])
+            val = self.simulator.params[param["name"]]
+            if normalize:
+                var_type = self.cfg["simulator"]["model"].get("var_type", "relative")
+                var = param.get("var", self.cfg["simulator"]["model"]["var"])
+                if var_type == "relative":
+                    var *= param.get("original", 1)
+                val = (val - param.get("original", 0)) / var
+            res.append(val)
 
         return res
 
