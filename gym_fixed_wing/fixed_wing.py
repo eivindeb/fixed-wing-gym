@@ -343,6 +343,8 @@ class FixedWingAircraft(gym.Env):
         """
         self.history["action"].append(action)
 
+        assert not np.any(np.isnan(action))
+
         if self.scale_actions:
             action = self.linear_action_scaling(np.clip(action,
                                                         self.cfg["action"].get("scale_low"),
