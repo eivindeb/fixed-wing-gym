@@ -1,6 +1,6 @@
 import gym
 from gym.utils import seeding
-from pyfly.pyfly import PyFly
+#from pyfly.pyfly import PyFly
 import json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ from collections import deque
 
 
 class FixedWingAircraft(gym.Env):
-    def __init__(self, config_path, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
+    def __init__(self, config_path, sampler=None, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
         """
         A gym environment for fixed-wing aircraft, interfacing the python flight simulator PyFly to the openAI
         environment.
@@ -34,6 +34,9 @@ class FixedWingAircraft(gym.Env):
         if config_kw is not None:
             set_config_attrs(self.cfg, config_kw)
 
+        if sim_config_kw is None:
+            sim_config_kw = {}
+        sim_config_kw.update({"actuation": {"inputs": [a_s["name"] for a_s in self.cfg["action"]["states"]]}})
         pyfly_kw = {"config_kw": sim_config_kw}
         if sim_config_path is not None:
             pyfly_kw["config_path"] = sim_config_path
@@ -44,14 +47,22 @@ class FixedWingAircraft(gym.Env):
         self.steps_count = None
         self.steps_max = self.cfg["steps_max"]
         self._steps_for_current_target = None
+        self.goal_achieved = False
+
+        self.integration_window = self.cfg.get("integration_window", 0)
 
         self.viewer = None
 
         self.np_random = np.random.RandomState()
+        self.obs_norm_mean_mask = []
+        self.obs_norm = self.cfg["observation"].get("normalize", False)
+        self.obs_module_indices = {"pi": [], "vf": []}
 
         obs_low = []
         obs_high = []
-        for obs_var in self.cfg["observation"]["states"]:
+        for i, obs_var in enumerate(self.cfg["observation"]["states"]):
+            self.obs_norm_mean_mask.append(obs_var.get("mask_mean", False))
+
             high = obs_var.get("high", None)
             if high is None:
                 state = self.simulator.state[obs_var["name"]]
@@ -87,74 +98,117 @@ class FixedWingAircraft(gym.Env):
                 obs_high.append(high)
                 obs_low.append(low)
 
+            if self.obs_norm:
+                if obs_var.get("mean", None) is None:
+                    if high != np.finfo(np.float32).max and low != -np.finfo(np.float32).max:
+                        obs_var["mean"] = high - low
+                    else:
+                        obs_var["mean"] = 0
+                if obs_var.get("var", None) is None:
+                    if high != np.finfo(np.float32).max and low != -np.finfo(np.float32).max:
+                        obs_var["var"] = (high - low) / (4 ** 2)  # Rule of thumb for variance
+                    else:
+                        obs_var["var"] = 1
+
+            if obs_var.get("module", "all") != "all":
+                self.obs_module_indices[obs_var["module"]].append(i)
+            else:
+                self.obs_module_indices["pi"].append(i)
+                self.obs_module_indices["vf"].append(i)
+
+        self.obs_exclusive_states = True if self.obs_module_indices["pi"] != self.obs_module_indices["vf"] else False
+
         if self.cfg["observation"]["length"] > 1:
             if self.cfg["observation"]["shape"] == "vector":
                 obs_low = obs_low * self.cfg["observation"]["length"]
                 obs_high = obs_high * self.cfg["observation"]["length"]
+                self.obs_norm_mean_mask = self.obs_norm_mean_mask * self.cfg["observation"]["length"]
             elif self.cfg["observation"]["shape"] == "matrix":
                 obs_low = [obs_low for _ in range(self.cfg["observation"]["length"])]
                 obs_high = [obs_high for _ in range(self.cfg["observation"]["length"])]
+                self.obs_norm_mean_mask = [self.obs_norm_mean_mask for _ in range(self.cfg["observation"]["length"])]
             else:
                 raise ValueError
 
-        action_low = []
-        action_high = []
-        for action_var in self.cfg["action"]["states"]:
-            high = action_var.pop("high", None)
-            if high is None:
-                state = self.simulator.state[action_var["name"]]
-                if state.value_max is not None:
-                    high = state.value_max
-                elif state.constraint_max is not None:
-                    high = state.constraint_max
-                else:
-                    high = np.finfo(np.float32).max
-            elif high == "max":
-                high = np.finfo(np.float32).max
-            action_high.append(high)
+        self.obs_norm_mean_mask = np.array(self.obs_norm_mean_mask)
 
-            low = action_var.pop("low", None)
-            if low is None:
-                state = self.simulator.state[action_var["name"]]
-                if state.value_min is not None:
-                    low = state.value_min
-                elif state.constraint_min is not None:
-                    low = state.constraint_min
-                else:
-                    low = -np.finfo(np.float32).max
-            elif low == "max":
-                low = -np.finfo(np.float32).max
-            action_low.append(low)
+        action_low = []
+        action_space_low = []
+        action_high = []
+        action_space_high = []
+        for action_var in self.cfg["action"]["states"]:
+            space_high = action_var.get("high", None)
+
+            state = self.simulator.state[action_var["name"]]
+            if state.value_max is not None:
+                state_high = state.value_max
+            elif state.constraint_max is not None:
+                state_high = state.constraint_max
+            else:
+                state_high = np.finfo(np.float32).max
+
+            if space_high == "max":
+                action_space_high.append(np.finfo(np.float32).max)
+            elif space_high is None:
+                action_space_high.append(state_high)
+            else:
+                action_space_high.append(space_high)
+            action_high.append(state_high)
+
+            space_low = action_var.get("low", None)
+
+            if state.value_min is not None:
+                state_low = state.value_min
+            elif state.constraint_min is not None:
+                state_low = state.constraint_min
+            else:
+                state_low = -np.finfo(np.float32).max
+
+            if space_low == "max":
+                action_space_low.append(-np.finfo(np.float32).max)
+            elif space_low is None:
+                action_space_low.append(state_low)
+            else:
+                action_space_low.append(space_low)
+            action_low.append(state_low)
 
         self.observation_space = gym.spaces.Box(low=np.array(obs_low), high=np.array(obs_high), dtype=np.float32)
-        self.action_lim_low = np.array(action_low)
-        self.action_lim_high = np.array(action_high)
+        self.action_scale_to_low = np.array(action_low)
+        self.action_scale_to_high = np.array(action_high)
         # Some agents simply clip produced actions to match action space, not allowing agent to learn that producing
         # actions outside this space is bad.
-        self.action_space = gym.spaces.Box(low=np.full(self.action_lim_low.shape, -np.finfo(np.float32).max),
-                                           high=np.full(self.action_lim_high.shape, np.finfo(np.float32).max),
+        self.action_space = gym.spaces.Box(low=np.array(action_space_low),
+                                           high=np.array(action_space_high),
                                            dtype=np.float32)
 
         self.scale_actions = self.cfg["action"].get("scale_space", False)
 
         if self.cfg["action"].get("bounds_multiplier", None) is not None:
-            self.action_outside_bounds_cost = self.cfg["action"].get("bounds_outside_cost", 0)
-            self.action_bounds_max = np.array([1, 1, 1]) * self.cfg["action"]["bounds_multiplier"]
-            self.action_bounds_min = np.array([-1, -1, -1]) * self.cfg["action"]["bounds_multiplier"]
+            self.action_bounds_max = np.full(self.action_space.shape, self.cfg["action"].get("scale_high", 1)) *\
+                                     self.cfg["action"]["bounds_multiplier"]
+            self.action_bounds_min = np.full(self.action_space.shape, self.cfg["action"].get("scale_low", -1)) *\
+                                     self.cfg["action"]["bounds_multiplier"]
 
         self.goal_enabled = self.cfg["target"]["success_streak_req"] > 0
 
         self.target = None
         self._target_props = None
         self._target_props_init = None
+        self._rew_factors_init = copy.deepcopy(self.cfg["reward"]["factors"])
 
         self.training = False
         self.render_on_reset = False
         self.render_on_reset_kw = {}
         self.save_on_reset = False
+        self.save_on_reset_kw = {}
 
-        self._schedule_level = None
-        self.set_schedule_level(0)
+        self.sampler = sampler
+
+        self.prev_shaping = {}
+
+        self._curriculum_level = None
+        self.use_curriculum = True
+        self.set_curriculum_level(0)
 
     def seed(self, seed=None):
         """
@@ -166,23 +220,27 @@ class FixedWingAircraft(gym.Env):
         self.simulator.seed(seed)
         return [seed]
 
-    def set_schedule_level(self, level):
+    def set_curriculum_level(self, level):  # TODO: implement parameters also?
         """
-        Set the schedule level of the environment, e.g. for starting with simple tasks and progressing to more difficult
+        Set the curriculum level of the environment, e.g. for starting with simple tasks and progressing to more difficult
         scenarios as the agent becomes increasingly proficient.
 
-        :param level: (int) the schedule level
+        :param level: (int) the curriculum level
         """
-        self._schedule_level = level
-        if "states" in self.cfg:
-            for state in self.cfg["states"]:
+        assert 0 <= level <= 1
+        self._curriculum_level = level
+        if "states" in self.cfg["simulator"]:
+            for state in self.cfg["simulator"]["states"]:
                 state = copy.copy(state)
                 state_name = state.pop("name")
                 convert_to_radians = state.pop("convert_to_radians", False)
-                for prop, values in state.items():
-                    val = values[self._schedule_level]
-                    if convert_to_radians and val is not None:
-                        val = np.radians(val)
+                for prop, val in state.items():
+                    if val is not None:
+                        if any([m in prop for m in ["min", "max"]]):
+                            midpoint = (state[prop[:-3] + "max"] + state[prop[:-3] + "min"]) / 2
+                            val = midpoint - self._curriculum_level * (midpoint - val)
+                        if convert_to_radians:
+                            val = np.radians(val)
                     setattr(self.simulator.state[state_name], prop, val)
 
         self._target_props_init = {"states": {}}
@@ -194,15 +252,36 @@ class FixedWingAircraft(gym.Env):
                     for k, v in state.items():
                         if k == "name":
                             continue
-                        if isinstance(v, list):
-                            self._target_props_init["states"][state_name][k] = v[self._schedule_level]
-                        else:
-                            self._target_props_init["states"][state_name][k] = v
+                        if k not in ["bound", "class"] and v is not None and not isinstance(v, bool):
+                            if k == "low":
+                                midpoint = (state["high"] + v) / 2
+                            elif k == "high":
+                                midpoint = (v + state["low"]) / 2
+                            else:
+                                midpoint = 0
+
+                            v = midpoint - self._curriculum_level * (midpoint - v)
+                        self._target_props_init["states"][state_name][k] = v
             else:
                 if isinstance(val, list):
-                    self._target_props_init[attr] = val[self._schedule_level]
+                    idx = round(len(val) * self._curriculum_level)
+                    self._target_props_init[attr] = val[idx]
                 else:
                     self._target_props_init[attr] = val
+
+        if self.sampler is not None:
+            for state, attrs in self._target_props_init["states"].items():
+                if attrs.get("convert_to_radians", False):
+                    low, high = np.radians(attrs["low"]), np.radians(attrs["high"])
+                else:
+                    low, high = attrs["low"], attrs["high"]
+                self.sampler.add_state("{}_target".format(state), state_range=(low, high))
+
+            for state_name in ["roll", "pitch", "velocity_u"]:
+                state = self.simulator.state[state_name]
+                self.sampler.add_state(state_name, (state.init_min, state.init_max))
+
+        self.use_curriculum = True
 
     def reset(self, state=None, target=None):
         """
@@ -217,10 +296,16 @@ class FixedWingAircraft(gym.Env):
             self.render_on_reset = False
             self.render_on_reset_kw = {}
         if self.save_on_reset:
-            self.save_history("test_hist_rl_eval.npy", ["roll", "pitch", "yaw", "Va"], save_targets=True)
+            self.save_history(**self.save_on_reset_kw)
             self.save_on_reset = False
+            self.save_on_reset_kw = {}
         self.steps_count = 0
+        if state is None and self.sampler is not None:
+            state = {}
+            for init_state in ["roll", "pitch", "velocity_u"]:
+                state[init_state] = self.sampler.draw_sample(init_state)
         self.simulator.reset(state)
+        self.sample_simulator_parameters()
         self.sample_target()
         if target is not None:
             for k, v in target.items():
@@ -238,6 +323,15 @@ class FixedWingAircraft(gym.Env):
             for state, status in self._get_goal_status().items():
                 self.history["goal"][state] = [status]
 
+        for rew_term in self.cfg["reward"]["terms"]:
+            self.prev_shaping[rew_term["function_class"]] = None
+
+        if self.cfg["reward"].get("randomize_scaling", False):
+            for i, rew_factor in enumerate(self._rew_factors_init):
+                if isinstance(rew_factor["scaling"], list):
+                    low, high = rew_factor["scaling"]
+                    self.cfg["reward"]["factors"][i]["scaling"] = self.np_random.uniform(low, high)
+
         return obs
 
     def step(self, action):
@@ -247,63 +341,60 @@ class FixedWingAircraft(gym.Env):
         :param action: ([float]) the action chosen by the agent
         :return: ([float], float, bool, dict) observation vector, reward, done, extra information about episode on done
         """
-        def linear_scaling(a, lim_high, lim_low):
-            return np.array(lim_high - lim_low) * (a - (-1)) / 2 + lim_low
-
         self.history["action"].append(action)
 
-        actuators = [a["name"] for a in self.cfg["action"]["states"]]
+        assert not np.any(np.isnan(action))
 
-        if self.action_outside_bounds_cost > 0:
-            action_rew_high = np.where(action > self.action_bounds_max, action - self.action_bounds_max, 0) *\
-                self.action_outside_bounds_cost
-            action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0) *\
-                self.action_outside_bounds_cost
         if self.scale_actions:
-            action = linear_scaling(np.clip(action, -1, 1), self.action_lim_high, self.action_lim_low)
+            action = self.linear_action_scaling(np.clip(action,
+                                                        self.cfg["action"].get("scale_low"),
+                                                        self.cfg["action"].get("scale_high")
+                                                        )
+                                                )
 
         control_input = list(action)
-        for i, actuator in enumerate(self.simulator.inputs):
-            if actuator not in actuators:
-                control_input.insert(i, 0)
 
         step_success, step_info = self.simulator.step(control_input)
 
         self.steps_count += 1
         self._steps_for_current_target += 1
 
-        reward = self.get_reward()
         info = {}
         done = False
 
-        if self.steps_max > 0 and self.steps_count >= self.steps_max:
+        if self.steps_count >= self.steps_max > 0:
             done = True
             info["termination"] = "steps"
 
         if step_success:
+            resample_target = False
+            goal_achieved_on_step = False
             if self.goal_enabled:
                 for state, status in self._get_goal_status().items():
                     self.history["goal"][state].append(status)
 
                 streak_req = self.cfg["target"]["success_streak_req"]
-                if self.cfg["target"]["on_success"] != "none" and self._steps_for_current_target >= streak_req and np.mean(self.history["goal"]["all"][-streak_req:]) >= self.cfg["target"]["success_streak_fraction"]:
-                    if self.cfg["target"]["success_reward"] == "timesteps":
-                        goal_reward = self.steps_max - self.steps_count
-                    else:
-                        goal_reward = self.cfg["target"]["success_reward"]
-
-                    reward += goal_reward
-
+                if self._steps_for_current_target >= streak_req \
+                        and np.mean(self.history["goal"]["all"][-streak_req:]) >= \
+                        self.cfg["target"]["success_streak_fraction"]:
+                    goal_achieved_on_step = not self.goal_achieved
+                    self.goal_achieved = True
                     if self.cfg["target"]["on_success"] == "done":
                         done = True
                         info["termination"] = "success"
                     elif self.cfg["target"]["on_success"] == "new":
-                        self.sample_target()
+                        resample_target = True
+                    elif self.cfg["target"]["on_success"] == "none":
+                        pass
                     else:
-                        raise Exception("Unexpected goal action {}".format(self.cfg["target"]["action"]))
+                        raise ValueError("Unexpected goal action {}".format(self.cfg["target"]["action"]))
+
+            reward = self.get_reward(action=self.history["action"][-1],
+                                     success=goal_achieved_on_step,
+                                     potential=self.cfg["reward"].get("form", "absolute") == "potential")
 
             resample_every = self.cfg["target"].get("resample_every", 0)
-            if resample_every and self._steps_for_current_target >= resample_every:
+            if resample_target or (resample_every and self._steps_for_current_target >= resample_every):
                 self.sample_target()
 
             for k, v in self._get_next_target().items():
@@ -316,35 +407,86 @@ class FixedWingAircraft(gym.Env):
             self.history["reward"].append(reward)
         else:
             done = True
-            info["termination"] = step_info["termination"]
-            obs = self.get_observation()
-            if self.steps_max > 0:
+            reward_fail = self.cfg["reward"].get("step_fail", 0)
+            if reward_fail == "timesteps":
                 reward = self.steps_count - self.steps_max
             else:
-                reward -= 100
-
-        if self.action_outside_bounds_cost > 0:
-            reward -= np.sum(np.abs(action_rew_high)) + np.sum(np.abs(action_rew_low))
+                reward = reward_fail
+            info["termination"] = step_info["termination"]
+            obs = self.get_observation()
 
         if done:
-            info["avg_errors"] = {k: np.abs(np.mean(v) / v[0]) if v[0] != 0 else np.nan for k, v in self.history["error"].items()}
-            if self.goal_enabled:
-                info["settle_time"] = {}
-                info["success"] = {}
-                for state, goal_status in self.history["goal"].items():
-                    streak = deque(maxlen=self.cfg["target"]["success_streak_req"])
-                    settle_time = np.nan
-                    success = False
-                    for i, step_goal in enumerate(goal_status):
-                        streak.append(step_goal)
-                        if len(streak) == self.cfg["target"]["success_streak_req"] and np.mean(streak) >= self.cfg["target"]["success_streak_fraction"]:
-                            settle_time = i
-                            success = True
-                            break
-                    info["settle_time"][state] = settle_time
-                    info["success"][state] = success
+            info["avg_error"] = {k: np.abs(np.mean(v) / v[0]) if np.abs(v[0]) >= 0.1 else np.nan for k, v in
+                                  self.history["error"].items()}
+
+            # TODO: should handle multiple targets
+            info["total_error"] = {}
+            for target_state, errors in self.history["error"].items():
+                target_values = np.array(self.history["target"][target_state])
+                std_traj = np.array(self._get_standard_trajectory(target_state))
+                step_min = min([len(errors), std_traj.shape[0], target_values.shape[0]])
+                trajectory_error = np.sum(np.abs(errors[:step_min]))
+                std_traj_error = np.sum(np.abs(target_values[:step_min] - std_traj[:step_min]))
+                info["total_error"][target_state] = trajectory_error / std_traj_error
+
+            info["end_error"] = {k: np.abs(np.mean(v[-50:])) for k, v in self.history["error"].items()}
+
+            control_commands = np.array([self.simulator.state[actuator["name"]].history["command"] for actuator in self.cfg["action"]["states"]])
+            delta_controls = np.diff(control_commands, axis=1)
+            info["control_variation"] = np.sum(np.abs(delta_controls)) / (3 * self.simulator.dt * delta_controls.shape[1])
+            info["settle_time"] = {}
+            info["success"] = {}
+            for state, goal_status in self.history["goal"].items():
+                streak = deque(maxlen=self.cfg["target"]["success_streak_req"])
+                settle_time = np.nan
+                success = False
+                for i, step_goal in enumerate(goal_status):
+                    streak.append(step_goal)
+                    if len(streak) == self.cfg["target"]["success_streak_req"] and np.mean(streak) >= \
+                            self.cfg["target"]["success_streak_fraction"]:
+                        settle_time = i
+                        success = True
+                        break
+                info["settle_time"][state] = settle_time
+                info["success"][state] = success
+
+            info["success_time_frac"] = {k: np.mean(v) for k, v in self.history["goal"].items()}
+
+            if self.sampler is not None:
+                for state in self.history["target"]:
+                    self.sampler.add_data_point("{}_target".format(state),
+                                                self.history["target"][state][0],
+                                                info["success"][state])
+
+                for state in ["roll", "pitch", "velocity_u"]:
+                    if state == "velocity_u":
+                        self.sampler.add_data_point(state, self.simulator.state["Va"].history[0], info["success"]["Va"])
+                    else:
+                        self.sampler.add_data_point(state, self.simulator.state[state].history[0], info["success"][state])
 
         return obs, reward, done, info
+
+    def linear_action_scaling(self, a, direction="forward"):
+        """
+        Scale input linearly from config parameters scale_high and scale_low to maximum and minimum values of actuators
+        reported by PyFly when direction is forward, or vice versa if direction is backward.
+        :param a: (np.array of float) action to scale
+        :param direction: (str) order of old and new minimums and maximums
+        :return: (np.array of float) scaled action
+        """
+        if direction == "forward":
+            new_max = self.action_scale_to_high
+            new_min = self.action_scale_to_low
+            old_max = self.cfg["action"].get("scale_high")
+            old_min = self.cfg["action"].get("scale_low")
+        elif direction == "backward":
+            old_max = self.action_scale_to_high
+            old_min = self.action_scale_to_low
+            new_max = self.cfg["action"].get("scale_high")
+            new_min = self.cfg["action"].get("scale_low")
+        else:
+            raise ValueError("Invalid value for direction {}".format(direction))
+        return np.array(new_max - new_min) * (a - old_min) / (old_max - old_min) + new_min
 
     def sample_target(self):
         """
@@ -354,8 +496,16 @@ class FixedWingAircraft(gym.Env):
 
         self.target = {}
         self._target_props = {}
+
+        ang_targets = False
         for target_var_name, props in self._target_props_init["states"].items():
             var_props = {"class": props.get("class", "constant")}
+
+            if var_props["class"] == "attitude_angular":
+                self.target[target_var_name] = 0
+                self._target_props[target_var_name] = props
+                ang_targets = True
+                continue
 
             delta = props.get("delta", None)
             convert_to_radians = props.get("convert_to_radians", False)
@@ -368,7 +518,10 @@ class FixedWingAircraft(gym.Env):
                 low = max(low, var_val - delta)
                 high = min(high, var_val + delta)
 
-            initial_value = self.np_random.uniform(low, high)
+            if self.sampler is None:
+                initial_value = self.np_random.uniform(low, high)
+            else:
+                initial_value = self.sampler.draw_sample("{}_target".format(target_var_name), (low, high))
             if var_props["class"] in "linear":
                 var_props["slope"] = self.np_random.uniform(props["slope_low"], props["slope_high"])
                 if self.np_random.uniform() < 0.5:
@@ -384,25 +537,94 @@ class FixedWingAircraft(gym.Env):
                 var_props["phase"] = self.np_random.uniform(0, 2 * np.pi) / (2 * np.pi / var_props["period"])
                 var_props["bias"] = initial_value - var_props["amplitude"] * np.sin(2 * np.pi / var_props["period"] * (self.steps_count + var_props["phase"]))
 
+            bound = props.get("bound", None)
+            if bound is not None:
+                var_props["bound"] = bound if not convert_to_radians else np.radians(bound)
+
             self.target[target_var_name] = initial_value
 
             self._target_props[target_var_name] = var_props
 
-    def render(self, mode="plot", close=True, block=False, save_path=None):
+        if ang_targets:
+            assert "roll" in self.target and "pitch" in self.target
+            ang_rates = ["omega_q", "omega_r", "omega_p"]
+            self.target.update({state: self._attitude_to_angular_rates(state) for state in ang_rates})
+
+    def sample_simulator_parameters(self):
+        """
+        Sample and set variables and parameters (of UAV mathematical model) of simulator, as specified by simulator
+        block in config file.
+        :return:
+        """
+        for key, value in self.cfg["simulator"].items():
+            if key == "states":
+                continue  # PyFly has its own state randomization procedures
+            elif key == "model":
+                dist_type = value.get("distribution", "gaussian")
+                param_value_var = value["var"]
+                param_value_clip = value.get("clip", None)
+                for param_arguments in value["parameters"]:
+                    orig_param_value = param_arguments.get("original", None)
+                    if orig_param_value is None:
+                        orig_param_value = self.simulator.params[param_arguments["name"]]
+                        param_arguments["original"] = orig_param_value
+                    if orig_param_value == 0:
+                        continue
+
+                    var = param_arguments.get("var", param_value_var)
+                    if value["var_type"] == "relative":
+                        var *= np.abs(orig_param_value)
+                    if dist_type == "gaussian":
+                        param_value = self.np_random.normal(loc=orig_param_value, scale=var)
+                        clip = param_arguments.get("clip", param_value_clip)
+                        if clip is not None:
+                            if value["var_type"] == "relative":
+                                clip *= orig_param_value
+                            param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
+                    elif dist_type == "uniform":
+                        param_value = self.np_random.uniform(low=orig_param_value - var, high=orig_param_value + var)
+                    else:
+                        raise ValueError("Unexpected distribution type {}".format(dist_type))
+
+                    self.simulator.params[param_arguments["name"]] = param_value
+            else:
+                if "values" in value:
+                    probs = value.get("probabilities", None)
+                    if probs is not None:
+                        probs = np.array(probs)
+                    val = self.np_random.choice(value["values"], p=probs)
+                else:
+                    val = self.np_random.uniform(value["low"], value["high"])
+                    if isinstance(value["low"], bool):
+                        val = bool(val)
+                setattr(self.simulator, key, val)
+
+    def render(self, mode="plot", show=True, close=True, block=False, save_path=None):
         """
         Visualize environment history. Plots of action and reward can be enabled through configuration file.
 
         :param mode: (str) render mode, one of plot for graph representation and animation for 3D animation with blender
+        :param show: (bool) if true, plt.show is called, if false the figure is returned
         :param close: (bool) if figure should be closed after showing, or reused for next render call
+        :param block: (bool) block argument to matplotlib blocking script from continuing until figure is closed
         :param save_path (str) if given, render is saved to this path.
+        :return: (matplotlib Figure) if show is false in plot mode, the render figure is returned
         """
+        # TODO: handle render call on reset env
         if self.training and not self.render_on_reset:
             self.render_on_reset = True
-            self.render_on_reset_kw = {"mode": mode, "close": close, "save_path": save_path}
+            self.render_on_reset_kw = {"mode": mode, "show": show, "block": block, "close": close, "save_path": save_path}
             return
 
         if mode == "plot":
-            targets = self.history["target"] if self.cfg["render"]["plot_target"] else None
+            if self.cfg["render"]["plot_target"]:
+                targets = {k: {"data": np.array(v)} for k, v in self.history["target"].items()}
+                if self.cfg["render"]["plot_goal"]:
+                    for state, status in self.history["goal"].items():
+                        if state == "all":
+                            continue
+                        bound = self._target_props[state].get("bound")
+                        targets[state]["bound"] = np.where(status, bound, np.nan)
 
             self.viewer = {"fig": plt.figure(figsize=(9, 16))}
 
@@ -431,16 +653,25 @@ class FixedWingAircraft(gym.Env):
             self.simulator.render(close=close, targets=targets, viewer=self.viewer)
 
             if save_path is not None:
+                if not os.path.isdir(os.path.dirname(save_path)):
+                    os.makedirs(os.path.dirname(save_path))
                 _, ext = os.path.splitext(save_path)
                 if ext != "":
                     plt.savefig(save_path, bbox_inches="tight", format=ext[1:])
                 else:
                     plt.savefig(save_path, bbox_inches="tight")
 
-            plt.show(block=block)
-
-            if close:
-                self.viewer = None
+            if show:
+                plt.show(block=block)
+                if close:
+                    plt.close(self.viewer["fig"])
+                    self.viewer = None
+            else:
+                if close:
+                    plt.close(self.viewer["fig"])
+                    self.viewer = None
+                else:
+                    return self.viewer["fig"]
 
         elif mode == "animation":
             raise NotImplementedError
@@ -457,47 +688,115 @@ class FixedWingAircraft(gym.Env):
         """
         if self.training and not self.save_on_reset:
             self.save_on_reset = True
+            self.save_on_reset_kw = {"path": path, "states": states, "save_targets": save_targets}
+            return
         self.simulator.save_history(path, states)
         if save_targets:
-            res = np.load(path).item()
+            res = np.load(path, allow_pickle=True).item()
             for state in self.target.keys():
                 if state in res:
                     res[state + "_target"] = self.history["target"][state]
             np.save(path, res)
 
-    def get_reward(self):
+    def get_reward(self, action=None, success=False, potential=False):
         """
         Get the reward for the current state of the environment.
 
         :return: (float) reward
         """
         reward = 0
+        terms = {term["function_class"]: {"val": 0, "weight": term["weight"], "val_shaping": 0} for term in self.cfg["reward"]["terms"]}
 
-        for component in self.cfg["reward"]:
-            if component["state"] == "action":
+        for component in self.cfg["reward"]["factors"]:
+            if component["class"] == "action":
                 if component["type"] == "value":
                     val = np.sum(np.abs(self.history["action"][-1]))
                 elif component["type"] == "delta":
                     if self.steps_count > 1:
-                        """
-                        vals = self.history[component["state"]]
-                        cur = vals[-1]
-                        past_avg = np.mean(vals[-(component["window_size"] + 1):-1], axis=0)
-                        val = np.sum(np.abs(cur - past_avg))
-                        """
-                        vals = self.history[component["state"]][-component["window_size"]:]
-                        distance = np.diff(vals, axis=0)
-                        val = np.sum(np.abs(distance))
+                        vals = self.history[component["name"]][-component["window_size"]:]
+                        deltas = np.diff(vals, axis=0)
+                        val = np.sum(np.abs(deltas))
                     else:
                         val = 0
-            elif component["type"] == "value":
-                val = self.simulator.state[component["state"]].value
-            elif component["type"] == "error":
-                val = self._get_error(component["state"])
+                elif component["type"] == "bound":
+                    if action is not None:
+                        action_rew_high = np.where(action > self.action_bounds_max, action - self.action_bounds_max, 0)
+                        action_rew_low = np.where(action < self.action_bounds_min, action - self.action_bounds_min, 0)
+                        val = np.sum(np.abs(action_rew_high)) + np.sum(np.abs(action_rew_low))
+                    else:
+                        val = 0
+                else:
+                    raise ValueError("Unexpected type {} for reward class action".format(component["type"]))
+            elif component["class"] == "state":
+                if component["type"] == "value":
+                    val = self.simulator.state[component["name"]].value
+                elif component["type"] == "error":
+                    val = self._get_error(component["name"])
+                elif component["type"] == "int_error":
+                    val = np.sum(self.history["error"][component["name"]][-self.integration_window:])
+                    if self.steps_count < self.integration_window:
+                        val += (self.integration_window - self.steps_count) * self.history["error"][component["name"]][0]
+                else:
+                    raise ValueError("Unexpected reward type {} for class state".format(component["type"]))
+            elif component["class"] == "success":
+                if success:
+                    if component["value"] == "timesteps":
+                        val = (self.steps_max - self.steps_count)
+                    else:
+                        val = component["value"]
+                else:
+                    val = 0
+            elif component["class"] == "step":
+                val = component["value"]
+            elif component["class"] == "goal":
+                val = 0
+                if component["type"] == "per_state":
+                    for target_state, is_achieved in self._get_goal_status().items():
+                        if target_state == "all":
+                            continue
+                        val += component["value"] / len(self.target) if is_achieved else 0
+                elif component["type"] == "all":
+                    val += component["value"] if self._get_goal_status()["all"] else 0
+                else:
+                    raise ValueError("Unexpected reward type {} for class goal".format(component["type"]))
             else:
-                raise ValueError("Unexpected reward component type {}".format(component["type"]))
+                raise ValueError("Unexpected reward component type {}".format(component["class"]))
 
-            reward -= np.clip(np.abs(val) / component["scaling"], 0, component["max"])
+            if component["function_class"] == "linear":
+                val = np.clip(np.abs(val) / component["scaling"], 0, component.get("max", None))
+            elif component["function_class"] == "exponential":
+                val = val ** 2 / component["scaling"]
+            elif component["function_class"] == "quadratic":
+                val = val ** 2 / component["scaling"]
+            else:
+                raise ValueError("Unexpected function class {} for {}".format(component["function_class"],
+                                                                              component["name"]))
+
+            if component.get("shaping", False):
+                terms[component["function_class"]]["val_shaping"] += val * np.sign(component.get("sign", -1))
+            else:
+                terms[component["function_class"]]["val"] += val * np.sign(component.get("sign", -1))
+
+        for term_class, term_info in terms.items():
+            if term_class == "exponential":
+                if potential:
+                    if self.prev_shaping[term_class] is not None:
+                        val = -1 + np.exp(term_info["val"] + (term_info["val_shaping"] - self.prev_shaping["exponential"]))
+                    else:
+                        val = -1 + np.exp(term_info["val"])
+                else:
+                    val = -1 + np.exp(term_info["val"] + term_info["val_shaping"])
+            elif term_class in ["linear", "quadratic"]:
+                val = term_info["val"]
+                if potential:
+                    if self.prev_shaping[term_class] is not None:
+                        val += term_info["val_shaping"] - self.prev_shaping[term_class]
+                else:
+                    val += term_info["val_shaping"]
+            else:
+                raise ValueError("Unexpected function class {}".format(term_class))
+            self.prev_shaping[term_class] = term_info["val_shaping"]
+            reward += term_info["weight"] * val
 
         return reward
 
@@ -508,44 +807,62 @@ class FixedWingAircraft(gym.Env):
         :return: ([float]) observation vector
         """
         obs = []
-        action_index = {}
+        if self.scale_actions:
+            action_states = [state["name"] for state in self.cfg["action"]["states"]]
+            action_indexes = {state["name"]: action_states.index(state["name"]) for state in self.cfg["observation"]["states"] if state["type"] == "action"}
         step = self.cfg["observation"].get("step", 1)
+        init_noise = None
+        noise = self.cfg["observation"].get("noise", None)
 
         for i in range(1, (self.cfg["observation"]["length"] + (1 if step == 1 else 0)) * step, step):
             obs_i = []
             if i > self.steps_count:
                 i = self.steps_count + 1
+                if self.cfg["observation"]["length"] > 1:
+                    init_noise = self.np_random.uniform(-1, 1) * self.simulator.dt
             for obs_var in self.cfg["observation"]["states"]:
                 if obs_var["type"] == "state":
-                    obs_i.append(self.simulator.state[obs_var["name"]].history[-i])
+                    val = self.simulator.state[obs_var["name"]].history[-i]
                 elif obs_var["type"] == "target":
                     if obs_var["value"] == "relative":
-                        obs_i.append(self._get_error(obs_var["name"]) if i == 1 else self.history["error"][obs_var["name"]][-i])
+                        val = self._get_error(obs_var["name"]) if i == 1 else self.history["error"][obs_var["name"]][-i]
                     elif obs_var["value"] == "absolute":
-                        obs_i.append(self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i])
+                        val = self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i]
+                    elif obs_var["value"] == "integrator":
+                        if self.history is None:
+                            val = self._get_error(obs_var["name"]) * self.integration_window
+                        else:
+                            val = np.sum(self.history["error"][obs_var["name"]][-self.integration_window - i:-i])
+                            if self.steps_count - i < self.integration_window:
+                                val += (self.integration_window - (self.steps_count - i)) * self.history["error"][obs_var["name"]][0]
                     else:
                         raise ValueError("Unexpected observation variable target value type: {}".format(obs_var["value"]))
                 elif obs_var["type"] == "action":
-                    window_size = obs_var.get("window_size", 1)
                     if self.steps_count - i < 0:
+                        val = self.simulator.state[obs_var["name"]].value
                         if self.scale_actions:
-                            obs_i.append(0)
-                        else:
-                            obs_i.append(self.simulator.state[obs_var["name"]].value)
+                            a_i = action_indexes[obs_var["name"]]
+                            action = np.zeros(shape=(len(action_indexes)))
+                            action[a_i] = val
+                            val = self.linear_action_scaling(action, direction="backward")[a_i]
                     else:
+                        window_size = obs_var.get("window_size", 1)
                         low_idx, high_idx = -window_size - i + 1, None if i == 1 else -(i - 1)
                         if self.scale_actions:
-                            try:
-                                a_i = action_index[obs_var["name"]]
-                            except:
-                                a_i = [action_var["name"] for action_var in self.cfg["action"]["states"]].index(obs_var["name"])
-                                action_index[obs_var["name"]] = a_i
-                            obs_i.append(np.sum(np.abs(np.diff([a[a_i] for a in self.history["action"][low_idx:high_idx]])), dtype=np.float32))
+                            a_i = action_indexes[obs_var["name"]]
+                            val = np.sum(np.abs(np.diff([a[a_i] for a in self.history["action"][low_idx:high_idx]])), dtype=np.float32)
                         else:
-                            obs_i.append(np.sum(np.abs(np.diff(self.simulator.state[obs_var["name"]].history["command"][low_idx:high_idx])), dtype=np.float32))
-
+                            val = np.sum(np.abs(np.diff(self.simulator.state[obs_var["name"]].history["command"][low_idx:high_idx])), dtype=np.float32)
                 else:
                     raise Exception("Unexpected observation variable type: {}".format(obs_var["type"]))
+                if init_noise is not None:  # TODO: maybe scale with state range?
+                    val += init_noise
+                if self.obs_norm and obs_var.get("norm", True):
+                    val -= obs_var["mean"]
+                    val /= obs_var["var"]
+                if noise is not None:
+                    val += self.np_random.normal(loc=noise["mean"], scale=noise["var"])
+                obs_i.append(val)
             if self.cfg["observation"]["shape"] == "vector":
                 obs.extend(obs_i)
             elif self.cfg["observation"]["shape"] == "matrix":
@@ -553,7 +870,48 @@ class FixedWingAircraft(gym.Env):
             else:
                 raise ValueError("Unexpected observation shape {}".format(self.cfg["observation"]["shape"]))
 
-        return obs
+        return np.array(obs)
+
+    def get_initial_state(self):
+        res = {"state": {}, "target": {}}
+        for state_name, state_var in self.simulator.state.items():
+            if state_name == "attitude":
+                continue
+            if isinstance(state_var.history, dict):
+                res["state"][state_name] = state_var.history["value"][0]
+            elif state_var.history is None:
+                res["state"][state_name] = 0
+            else:
+                res["state"][state_name] = state_var.history[0]
+
+        res["target"] = {state: history[0] for state, history in self.history["target"].items()}
+
+        return res
+
+    def get_random_initial_states(self, n_states):
+        obs, states = [], []
+        for i in range(n_states):
+            obs.append(env.reset())
+            states.append({"state": self.get_initial_state(), "target": self.target})
+
+        return obs, states
+
+    def get_simulator_parameters(self, normalize=True):
+        res = []
+        for param in self.cfg["simulator"]["model"]["parameters"]:
+            val = self.simulator.params[param["name"]]
+            if normalize:
+                var_type = self.cfg["simulator"]["model"].get("var_type", "relative")
+                var = param.get("var", self.cfg["simulator"]["model"]["var"])
+                if var_type == "relative":
+                    original_value = param.get("original", self.simulator.params[param["name"]])
+                    if original_value == 0:
+                        continue
+                    var *= original_value
+                val = (val - param.get("original", 0)) / var
+            res.append(val)
+
+        return res
 
     def _get_error(self, state):
         """
@@ -588,12 +946,11 @@ class FixedWingAircraft(gym.Env):
         :return: (dict) status for each and all target states
         """
         goal_status = {}
-        for state, props in self._target_props_init["states"].items():
-            err = self._get_error(state)
-            bound = props["bound"]
-            if props.get("convert_to_radians", False):
-                bound = np.radians(bound)
-            goal_status[state] = np.abs(err) <= bound
+        for state, props in self._target_props.items():
+            bound = props.get("bound", None)
+            if bound is not None:
+                err = self._get_error(state)
+                goal_status[state] = np.abs(err) <= bound
 
         goal_status["all"] = all(goal_status.values())
 
@@ -647,6 +1004,10 @@ class FixedWingAircraft(gym.Env):
                 res[state] = self.target[state] + props["slope"] * self.simulator.dt
             elif var_class == "sinusoidal":
                 res[state] = props["amplitude"] * np.sin(2 * np.pi / props["period"] * (self.steps_count + props["phase"])) + props["bias"]
+            elif var_class == "attitude_angular":
+                if state not in ["omega_p", "omega_q", "omega_r"]:
+                    raise ValueError("Invalid state for class attitude_angular {}".format(state))
+                res[state] = self._attitude_to_angular_rates(state)
             else:
                 raise ValueError
 
@@ -655,16 +1016,243 @@ class FixedWingAircraft(gym.Env):
 
         return res
 
+    def _get_standard_trajectory(self, state, initial_value=None, end_value=None, steps=None):
+        if initial_value is None:
+            initial_value = self.simulator.state[state].history[0]
+
+        if steps is None:
+            steps = self.steps_count
+
+        if state == "roll":
+            if end_value is None:
+                end_value = self.history["target"][state][-1]
+            delta = initial_value - end_value
+            L, k, x0, c = delta * 1.18, -0.025, 70, end_value
+
+            values = [L / (1 + np.exp(- k * (step - x0))) + c for step in range(steps)]
+            offset = np.radians(0.5)
+            values = [v + (offset - np.abs(v - end_value) if np.abs(v - end_value) < offset else 0) for v in values]
+        elif state == "pitch":
+            if end_value is None:
+                end_value = self.history["target"][state][-1]
+            delta = initial_value - end_value
+            delta_pitch_max = 40
+            delta_mag = min(1, np.abs(delta) / delta_pitch_max)
+            k = -(0.25 - delta_mag * 0.15)
+            x0 = 15 + delta_mag * 20
+            L, c = delta * 1.02, np.sign(delta) * delta * 0.005 + end_value
+
+            values = [L / (1 + np.exp(- k * (step - x0))) + c for step in range(steps)]
+
+            offset = np.radians(0.5)
+            values = [v + (offset - np.abs(v - end_value) if np.abs(v - end_value) < offset else 0) for v in values]
+        elif state == "Va":
+            if end_value is None:
+                end_value = self.history["target"][state]
+            values = [initial_value]
+            offset = 0.1
+            for step in range(steps - 1):
+                if isinstance(end_value, list):
+                    end_value_i = end_value[step]
+                else:
+                    end_value_i = end_value
+                val = values[step] + (end_value_i - values[step]) * 1 / 75
+                if np.abs(val - end_value_i) < offset:
+                    val += offset - np.abs(val - end_value_i)
+                values.append(val)
+        else:
+            raise ValueError("Non target state {} in _get_standard_trajectory".format(state))
+
+        return values
+
+    def _attitude_to_angular_rates(self, state):
+        max_vel = self._target_props[state].get("max_vel", np.radians(180))
+
+        roll_angle = self.simulator.state["roll"].value
+        pitch_angle = self.simulator.state["pitch"].value
+
+        roll_error = self._get_error("roll")
+        pitch_error = self._get_error("pitch")
+
+        # TODO: Evenly distribute between q and r or randomly?
+        # TODO: stop angular rates from oscillating between positive and negative when roll angle is maximal
+
+        q_weight_pitch = np.cos(roll_angle)
+        r_weight_pitch = np.sin(roll_angle)
+
+        max_pitch_change = max_vel * self.simulator.dt * (q_weight_pitch + r_weight_pitch)
+
+        if state == "omega_p":
+            if roll_error <= np.radians(0.1):
+                damping = 0.05
+            #damping = ((np.abs(roll_error / (0.5 * np.pi))) ** 2) / (np.abs(roll_error / (0.5 * np.pi)))
+            damping = np.abs(roll_error / (0.5 * np.pi))
+            q_roll = np.sin(roll_angle) * np.tan(pitch_angle) * self.target["omega_q"] * self.simulator.dt
+            r_roll = np.cos(roll_angle) * np.tan(pitch_angle) * self.target["omega_r"] * self.simulator.dt
+            res = np.clip(-(roll_error - q_roll - r_roll) / self.simulator.dt, -max_vel, max_vel)
+        elif state == "omega_q":
+            if pitch_error <= np.radians(0.1):
+                damping = 0.05
+            #damping = ((np.abs(pitch_error / (0.5 * np.pi))) ** 2) / (np.abs(pitch_error / (0.5 * np.pi)))
+            damping = np.abs(pitch_error / (0.5 * np.pi))
+            if max_pitch_change > np.abs(pitch_error):
+                res = - pitch_error / (2 * q_weight_pitch)
+            else:
+                res = np.sign(q_weight_pitch) * max_vel * np.sign(pitch_error)
+        elif state == "omega_r":
+            if pitch_error <= np.radians(0.1):
+                damping = 0.05
+            #damping = ((np.abs(pitch_error / (0.5 * np.pi))) ** 2) / (np.abs(pitch_error / (0.5 * np.pi)))
+            damping = np.abs(pitch_error / (0.5 * np.pi))
+            if max_pitch_change > np.abs(pitch_error):
+                res = pitch_error / r_weight_pitch
+            else:
+                res = - np.sign(r_weight_pitch) * max_vel * np.sign(pitch_error)
+
+        if np.isnan(damping):
+            damping = 0.05
+        else:
+            damping = min(1, damping)
+
+        res = np.clip(self.target[state] + (res * damping - self.target[state]) * 1 / 20, -max_vel, max_vel)
+
+        return res
+
+
+class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
+    def __init__(self, config_path, sampler=None, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
+        super(FixedWingAircraftGoal, self).__init__(config_path=config_path,
+                                                sampler=sampler,
+                                                sim_config_path=sim_config_path,
+                                                sim_parameter_path=sim_parameter_path,
+                                                config_kw=config_kw,
+                                                sim_config_kw=sim_config_kw
+                                                )
+
+        self.goal_states = [goal["name"] for goal in self.cfg["observation"]["goals"]]
+        self.goal_means = np.array([goal["mean"] for goal in self.cfg["observation"]["goals"]])
+        self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
+
+        if len(self.observation_space.shape) == 1:
+            goal_space_shape = (len(self.goal_states),)
+        else:
+            goal_space_shape = (self.observation_space.shape[0], len(self.goal_states))
+        self.observation_space = gym.spaces.Dict(dict(
+            desired_goal=gym.spaces.Box(-np.inf, np.inf, shape=goal_space_shape, dtype="float32"),
+            achieved_goal=gym.spaces.Box(-np.inf, np.inf, shape=goal_space_shape, dtype="float32"),
+            observation=self.observation_space
+        ))
+
+        for module in ["pi", "vf"]:
+            self.obs_module_indices[module].extend(list(
+                range(len(self.cfg["observation"]["states"]),
+                len(self.cfg["observation"]["states"]) + 2 * len(self.goal_states))))
+
+    def reset(self, state=None, target=None):
+        super(FixedWingAircraftGoal, self).reset()
+        return super(FixedWingAircraftGoal, self).reset(state, target)
+
+    def get_observation(self):
+        def scale_goal_states(states, m, v):
+            states = np.array(states)
+            return (states - m) / v
+        obs = super(FixedWingAircraftGoal, self).get_observation()
+
+        # TODO: might have to do some smart pattern thing here
+        achieved_goal = scale_goal_states([self.simulator.state[goal_state].value for goal_state in self.goal_states], self.goal_means, self.goal_vars)
+        desired_goal = scale_goal_states([self.target[state] for state in self.goal_states], self.goal_means, self.goal_vars)
+        if self.cfg["observation"]["length"] > 1:
+            achieved_goal = np.repeat(achieved_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
+            desired_goal = np.repeat(desired_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
+
+        obs = dict(
+            desired_goal=desired_goal,
+            achieved_goal=achieved_goal,
+            observation=obs
+        )
+
+        return obs
+
+    def get_goal_limits(self):
+        low, high = [], []
+        for i, goal_state in enumerate(self.goal_states):
+            goal_cfg = [state for state in self.cfg["target"]["states"] if state["name"] == goal_state][0]
+            l, h = goal_cfg["low"], goal_cfg["high"]
+            if goal_cfg.get("convert_to_radians", False):
+                l, h = np.radians(l), np.radians(h)
+            l, h = (l - self.goal_means[i]) / self.goal_vars[i], (h - self.goal_means[i]) / self.goal_vars[i]
+            low.append(l)
+            high.append(h)
+
+        return np.array(low), np.array(high)
+
+    def compute_reward(self, achieved_goal, desired_goal, info):
+        original_values = {"achieved": {}, "desired": {}, "action_history": copy.deepcopy(self.history["action"]),
+                           "steps_count": self.steps_count}
+
+        achieved_goal = achieved_goal * self.goal_vars + self.goal_means
+        desired_goal = desired_goal * self.goal_vars + self.goal_means
+
+        action = info.get("action", np.array(np.zeros(shape=(len(self.cfg["action"]["states"])))))
+        self.history["action"] = self.history["action"][:info["step"]] # TODO: this assumes that this function is called with transitions from the trajectory currently saved in the environment (might not work for multiprocessing etc., and if reset)
+        self.history["action"].append(action)
+        self.steps_count = info["step"]
+        success = False  # TODO: dont know if i want to use this, is get_goal_status in any case
+
+        for i, goal_state in enumerate(self.goal_states):
+            original_values["achieved"][goal_state] = self.simulator.state[goal_state].value
+            original_values["desired"][goal_state] = self.target[goal_state]
+            self.target[goal_state] = desired_goal[i]
+
+        potential = self.cfg["reward"]["form"] == "potential"
+        if potential:
+            original_values["prev_shaping"] = self.prev_shaping
+            if info["step"] > 0:
+                # Update prev_shaping to state before transition
+                prev_action = self.history["action"][-2] if len(self.history["action"]) >= 2 else None
+                for i, goal_state in enumerate(self.goal_states):
+                    self.simulator.state[goal_state].value = info["prev_state"][i]
+                _ = super(FixedWingAircraftGoal, self).get_reward(action=prev_action, success=success, potential=potential)
+            else:
+                for rew_term in self.cfg["reward"]["terms"]:
+                    self.prev_shaping[rew_term["function_class"]] = None
+
+        for i, goal_state in enumerate(self.goal_states):
+            self.simulator.state[goal_state].value = achieved_goal[i]
+
+        reward = super(FixedWingAircraftGoal, self).get_reward(action=action, success=success, potential=potential)
+
+        for goal_state in original_values["achieved"]:
+            self.simulator.state[goal_state].value = original_values["achieved"][goal_state]
+            self.target[goal_state] = original_values["desired"][goal_state]
+
+        self.history["action"] = original_values["action_history"]
+        self.steps_count = original_values["steps_count"]
+        if potential:
+            self.prev_shaping = original_values["prev_shaping"]
+
+        return reward
+
+
 if __name__ == "__main__":
+    # TODO FIX THIS HACK
+    import sys
+    sys.path.append("/home/eivind/Documents/dev/pyfly")
+    from pyfly.pyfly import PyFly
     from pyfly.pid_controller import PIDController
 
-    env = FixedWingAircraft("fixed_wing_config.json", config_kw={"steps_max": 500})
+    env = FixedWingAircraft("fixed_wing_config_dev.json", config_kw={"steps_max": 500})
     env.seed(0)
+    env.set_curriculum_level(0.5)
 
+    #obs = env.reset(state={"roll": np.radians(30), "pitch": np.radians(5), "velocity_u": 25, "throttle": 0, "velocity_v": 0, "velocity_w": 0,
+    #                       "omega_p": 0, "omega_q": 0, "omega_r": 0, "elevon_right": 0, "elevon_left": 0},
+    #                target={"roll": np.radians(0), "pitch": np.radians(20), "Va": 20})
     obs = env.reset()
 
     pid = PIDController(env.simulator.dt)
     done = False
+
     while not done:
         pid.set_reference(env.target["roll"], env.target["pitch"], env.target["Va"])
         phi = env.simulator.state["roll"].value
@@ -674,6 +1262,7 @@ if __name__ == "__main__":
 
         action = pid.get_action(phi, theta, Va, omega)
         obs, rew, done, info = env.step(action)
-
     env.render(block=True)
+else:
+    from pyfly.pyfly import PyFly
 

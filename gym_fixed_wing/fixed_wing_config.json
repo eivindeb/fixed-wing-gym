@@ -79,24 +79,26 @@
     ]
   },
   "action": {
-    "scale_space": true,
+    "scale_space": false,
+    "scale_low": -1,
+    "scale_high": 1,
     "bounds_multiplier": 1.5,
     "bounds_outside_cost": 1,
     "states": [
       {
         "name": "elevator",
-        "low": null,
-        "high": null
+        "low": "max",
+        "high": "max"
       },
       {
         "name": "aileron",
-        "low": null,
-        "high": null
+        "low": "max",
+        "high": "max"
       },
       {
         "name": "throttle",
-        "low": null,
-        "high": null
+        "low": "max",
+        "high": "max"
       }
     ]
   },
@@ -113,7 +115,7 @@
         "low": [-20, -45, -60],
         "high": [20, 45, 60],
         "delta": [10, 45, 180],
-        "class": ["constant", "constant", "constant", "constant", "constant"],
+        "class": "constant",
         "bound": 3,
         "amplitude_low": 160,
         "amplitude_high": 160,
@@ -126,7 +128,7 @@
         "low": [-10, -20, -25],
         "high": [10, 20, 25],
         "delta": [5, 20, 45],
-        "class": ["constant", "constant", "constant", "constant", "constant"],
+        "class": "constant",
         "bound": 3,
         "period_low": 300,
         "period_high": 600,
@@ -140,36 +142,66 @@
         "delta": [3, 4, 6],
         "class": "compensate",
         "bound": 2
+      },
+      {
+        "name": "omega_p",
+        "class": "attitude_angular",
+        "convert_to_radians": true,
+        "bound": 10
+      },
+      {
+        "name": "omega_q",
+        "class": "attitude_angular",
+        "convert_to_radians": true,
+        "bound": 10
+      },
+      {
+        "name": "omega_r",
+        "class": "attitude_angular",
+        "convert_to_radians": true,
+        "bound": 10
       }
     ]
   },
-  "reward": [
-    {
-      "state": "roll",
-      "type": "error",
-      "max": 0.30,
-      "scaling": 3.2
-    },
-    {
-      "state": "pitch",
-      "type": "error",
-      "max": 0.30,
-      "scaling": 2.2
-    },
-    {
-      "state": "Va",
-      "type": "error",
-      "max": 0.30,
-      "scaling": 25
-    },
-    {
-      "state": "action",
-      "type": "delta",
-      "window_size": 5,
-      "max": 0.1,
-      "scaling": 60
-    }
-  ],
+  "reward": {
+    "terms": [
+      {
+        "function_class": "exponential",
+        "weight": 1
+      },
+      {
+        "function_class": "linear",
+        "weight": 1
+      }
+    ],
+    "states": [
+      {
+        "state": "roll",
+        "type": "error",
+        "function_class": "exponential",
+        "scaling": 3.2
+      },
+      {
+        "state": "pitch",
+        "type": "error",
+        "function_class": "exponential",
+        "scaling": 2.2
+      },
+      {
+        "state": "Va",
+        "type": "error",
+        "function_class": "exponential",
+        "scaling": 25
+      },
+      {
+        "state": "action",
+        "type": "delta",
+        "function_class": "linear",
+        "window_size": 5,
+        "scaling": 60
+      }
+    ]
+  },
   "states": [
     {
       "name": "roll",
