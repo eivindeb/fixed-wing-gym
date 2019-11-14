@@ -1,6 +1,6 @@
 import gym
 from gym.utils import seeding
-#from pyfly.pyfly import PyFly
+from pyfly.pyfly import PyFly
 import json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1235,19 +1235,13 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
 
 
 if __name__ == "__main__":
-    # TODO FIX THIS HACK
-    import sys
-    sys.path.append("/home/eivind/Documents/dev/pyfly")
-    from pyfly.pyfly import PyFly
     from pyfly.pid_controller import PIDController
 
-    env = FixedWingAircraft("fixed_wing_config_dev.json", config_kw={"steps_max": 500})
-    env.seed(0)
-    env.set_curriculum_level(0.5)
-
-    #obs = env.reset(state={"roll": np.radians(30), "pitch": np.radians(5), "velocity_u": 25, "throttle": 0, "velocity_v": 0, "velocity_w": 0,
-    #                       "omega_p": 0, "omega_q": 0, "omega_r": 0, "elevon_right": 0, "elevon_left": 0},
-    #                target={"roll": np.radians(0), "pitch": np.radians(20), "Va": 20})
+    env = FixedWingAircraft("fixed_wing_config.json", config_kw={"steps_max": 1000,
+                                                                 "observation": {"noise": {"mean": 0, "var": 0}},
+                                                                 "action": {"scale_space": False}})
+    env.seed(2)
+    env.set_curriculum_level(1)
     obs = env.reset()
 
     pid = PIDController(env.simulator.dt)
@@ -1263,6 +1257,4 @@ if __name__ == "__main__":
         action = pid.get_action(phi, theta, Va, omega)
         obs, rew, done, info = env.step(action)
     env.render(block=True)
-else:
-    from pyfly.pyfly import PyFly
 
