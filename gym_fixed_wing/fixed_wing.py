@@ -614,9 +614,9 @@ class FixedWingAircraft(gym.Env):
         if self.training and not self.render_on_reset:
             self.render_on_reset = True
             self.render_on_reset_kw = {"mode": mode, "show": show, "block": block, "close": close, "save_path": save_path}
-            return
+            return None
 
-        if mode == "plot":
+        if mode == "plot" or mode == "rgb_array":
             if self.cfg["render"]["plot_target"]:
                 targets = {k: {"data": np.array(v)} for k, v in self.history["target"].items()}
                 if self.cfg["render"]["plot_goal"]:
@@ -661,17 +661,20 @@ class FixedWingAircraft(gym.Env):
                 else:
                     plt.savefig(save_path, bbox_inches="tight")
 
-            if show:
-                plt.show(block=block)
-                if close:
-                    plt.close(self.viewer["fig"])
-                    self.viewer = None
+            if mode == "rbg_array":
+                return
             else:
-                if close:
-                    plt.close(self.viewer["fig"])
-                    self.viewer = None
+                if show:
+                    plt.show(block=block)
+                    if close:
+                        plt.close(self.viewer["fig"])
+                        self.viewer = None
                 else:
-                    return self.viewer["fig"]
+                    if close:
+                        plt.close(self.viewer["fig"])
+                        self.viewer = None
+                    else:
+                        return self.viewer["fig"]
 
         elif mode == "animation":
             raise NotImplementedError
