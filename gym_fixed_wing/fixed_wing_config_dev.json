@@ -1,6 +1,6 @@
 {
   "steps_max": 2000,
-  "integration_window": 500,
+  "integration_window": 0,
   "observation": {
     "length": 1,
     "step": 1,
@@ -101,22 +101,19 @@
         "name": "elevator",
         "type": "action",
         "window_size": 5,
-        "norm": false,
-        "module": "vf"
+        "norm": false
       },
       {
         "name": "aileron",
         "type": "action",
         "window_size": 5,
-        "norm": false,
-        "module": "vf"
+        "norm": false
       },
       {
         "name": "throttle",
         "type": "action",
         "window_size": 5,
-        "norm": false,
-        "module": "vf"
+        "norm": false
       }
     ]
   },
@@ -145,7 +142,7 @@
   },
   "target": {
     "resample_every": 0,
-    "success_streak_req": 50,
+    "success_streak_req": 100,
     "success_streak_fraction": 0.95,
     "on_success": "none",
     "states": [
@@ -179,7 +176,7 @@
   },
   "reward": {
     "form": "absolute",
-    "randomize_scaling": true,
+    "randomize_scaling": false,
     "step_fail": "timesteps",
     "terms": [
       {
@@ -193,8 +190,9 @@
         "class": "state",
         "type": "error",
         "function_class": "linear",
-        "scaling": 2.5,
+        "scaling": 3.2,
         "shaping": true,
+        "max": 0.3,
         "sign": -1
       },
       {
@@ -202,8 +200,9 @@
         "class": "state",
         "type": "error",
         "function_class": "linear",
-        "scaling": 2.5,
+        "scaling": 3.2,
         "shaping": true,
+        "max": 0.3,
         "sign": -1
       },
       {
@@ -213,6 +212,7 @@
         "function_class": "linear",
         "scaling": 25,
         "shaping": true,
+        "max": 0.3,
         "sign": -1
       },
       {
@@ -233,31 +233,6 @@
         "scaling": 1,
         "shaping": false,
         "sign": -1
-      },
-      {
-        "class": "success",
-        "function_class": "linear",
-        "scaling": 1,
-        "value": 0,
-        "shaping": false,
-        "sign": 1
-      },
-      {
-        "class": "step",
-        "function_class": "linear",
-        "scaling": 1,
-        "value": 1,
-        "shaping": false,
-        "sign": -1
-      },
-      {
-        "class": "goal",
-        "type": "per_state",
-        "function_class": "linear",
-        "scaling": 1,
-        "value": 1,
-        "shaping": false,
-        "sign": 1
       }
     ]
   },
@@ -313,56 +288,23 @@
         "constraint_min": null,
         "constraint_max": null,
         "convert_to_radians": true
+      },
+      {
+        "name": "velocity_u",
+        "init_min": 11,
+        "init_max": 28
+      },
+      {
+        "name": "velocity_v",
+        "init_min": -5,
+        "init_max": 5
+      },
+      {
+        "name": "velocity_w",
+        "init_min": -5,
+        "init_max": 5
       }
-    ],
-    "model": {
-      "var_type": "relative",
-      "var": 0.05,
-      "clip": 0.1,
-      "parameters": [
-        {"name": "C_D_0"},
-        {"name": "C_D_alpha1"},
-        {"name": "C_D_alpha2"},
-        {"name": "C_D_beta1"},
-        {"name": "C_D_beta2"},
-        {"name": "C_D_delta_e"},
-        {"name": "C_D_p"},
-        {"name": "C_D_q"},
-        {"name": "C_L_0"},
-        {"name": "C_L_alpha"},
-        {"name": "C_L_delta_e"},
-        {"name": "C_L_q"},
-        {"name": "C_Y_0"},
-        {"name": "C_Y_beta"},
-        {"name": "C_Y_delta_a"},
-        {"name": "C_Y_p"},
-        {"name": "C_l_0"},
-        {"name": "C_l_beta"},
-        {"name": "C_l_delta_a"},
-        {"name": "C_l_delta_r"},
-        {"name": "C_l_p"},
-        {"name": "C_m_0"},
-        {"name": "C_m_alpha"},
-        {"name": "C_m_delta_e"},
-        {"name": "C_m_fp"},
-        {"name": "C_m_q"},
-        {"name": "C_n_0"},
-        {"name": "C_n_beta"},
-        {"name": "C_n_delta_a"},
-        {"name": "C_n_p"},
-        {"name": "C_prop"},
-        {"name": "M"},
-        {"name": "a_0"},
-        {"name": "k_Omega"},
-        {"name": "k_T_P"},
-        {"name": "k_motor"},
-        {"name": "mass"}
-      ]
-    },
-    "dt": {
-      "low": 0.03,
-      "high": 0.08
-    }
+    ]
   },
   "render": {
     "plot_action": false,

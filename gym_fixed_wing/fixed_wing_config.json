@@ -8,7 +8,7 @@
     "normalize": false,
     "noise": {
       "mean": 0,
-      "var": 0.1
+      "var": 0
     },
     "states": [
       {
@@ -266,33 +266,37 @@
         "init_max": 5
       },
       {
+        "name": "Va",
+        "constraint_max": 70
+      },
+      {
         "name": "omega_p",
         "init_min": -60,
         "init_max": 60,
-        "constraint_min": null,
-        "constraint_max": null,
+        "constraint_min": -720,
+        "constraint_max": 720,
         "convert_to_radians": true
       },
       {
         "name": "omega_q",
         "init_min": -60,
         "init_max": 60,
-        "constraint_min": null,
-        "constraint_max": null,
+        "constraint_min": -720,
+        "constraint_max": 720,
         "convert_to_radians": true
       },
       {
         "name": "omega_r",
         "init_min": -60,
         "init_max": 60,
-        "constraint_min": null,
-        "constraint_max": null,
+        "constraint_min": -720,
+        "constraint_max": 720,
         "convert_to_radians": true
       }
     ]
   },
   "render": {
-    "plot_action": false,
+    "plot_action": true,
     "plot_reward": true,
     "plot_target": true,
     "plot_goal": true
