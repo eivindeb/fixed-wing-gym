@@ -208,7 +208,7 @@ class FixedWingAircraft(gym.Env):
 
         self._curriculum_level = None
         self.use_curriculum = True
-        self.set_curriculum_level(0)
+        self.set_curriculum_level(1)
 
     def seed(self, seed=None):
         """
@@ -236,7 +236,7 @@ class FixedWingAircraft(gym.Env):
                 convert_to_radians = state.pop("convert_to_radians", False)
                 for prop, val in state.items():
                     if val is not None:
-                        if any([m in prop for m in ["min", "max"]]):
+                        if "constraint" not in prop and any([m in prop for m in ["min", "max"]]):
                             midpoint = (state[prop[:-3] + "max"] + state[prop[:-3] + "min"]) / 2
                             val = midpoint - self._curriculum_level * (midpoint - val)
                         if convert_to_radians:
