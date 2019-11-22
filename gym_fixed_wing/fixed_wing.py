@@ -1241,7 +1241,7 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
 if __name__ == "__main__":
     from pyfly.pid_controller import PIDController
 
-    env = FixedWingAircraft("fixed_wing_config.json", config_kw={"steps_max": 1000,
+    env = FixedWingAircraft("fixed_wing_config_dev.json", config_kw={"steps_max": 1000,
                                                                  "observation": {"noise": {"mean": 0, "var": 0}},
                                                                  "action": {"scale_space": False}})
     env.seed(2)
