@@ -907,12 +907,14 @@ class FixedWingAircraft(gym.Env):
             if normalize:
                 var_type = self.cfg["simulator"]["model"].get("var_type", "relative")
                 var = param.get("var", self.cfg["simulator"]["model"]["var"])
-                if var_type == "relative":
-                    original_value = param.get("original", self.simulator.params[param["name"]])
-                    if original_value == 0:
-                        continue
-                    var *= original_value
-                val = (val - param.get("original", 0)) / var
+                val = val - param.get("original", 0)
+                if var != 0:
+                    if var_type == "relative":
+                        original_value = param.get("original", self.simulator.params[param["name"]])
+                        if original_value == 0:
+                            continue
+                        var *= original_value
+                    val = val / var
             res.append(val)
 
         return res
