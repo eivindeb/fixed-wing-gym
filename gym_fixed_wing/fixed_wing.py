@@ -579,7 +579,7 @@ class FixedWingAircraft(gym.Env):
                         clip = param_arguments.get("clip", param_value_clip)
                         if clip is not None:
                             if value["var_type"] == "relative":
-                                clip *= orig_param_value
+                                clip *= np.abs(orig_param_value)
                             param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
                     elif dist_type == "uniform":
                         param_value = self.np_random.uniform(low=orig_param_value - var, high=orig_param_value + var)
