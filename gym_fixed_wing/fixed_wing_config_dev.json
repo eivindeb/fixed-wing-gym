@@ -304,7 +304,55 @@
         "init_min": -5,
         "init_max": 5
       }
-    ]
+    ],
+    "model": {
+      "var_type": "relative",
+      "var": 0.0,
+      "clip": 0.1,
+      "parameters": [
+        {"name": "C_D_0"},
+        {"name": "C_D_alpha1"},
+        {"name": "C_D_alpha2"},
+        {"name": "C_D_beta1"},
+        {"name": "C_D_beta2"},
+        {"name": "C_D_delta_e"},
+        {"name": "C_D_p"},
+        {"name": "C_D_q"},
+        {"name": "C_L_0"},
+        {"name": "C_L_alpha"},
+        {"name": "C_L_delta_e"},
+        {"name": "C_L_q"},
+        {"name": "C_Y_0"},
+        {"name": "C_Y_beta"},
+        {"name": "C_Y_delta_a"},
+        {"name": "C_Y_p"},
+        {"name": "C_l_0"},
+        {"name": "C_l_beta"},
+        {"name": "C_l_delta_a"},
+        {"name": "C_l_delta_r"},
+        {"name": "C_l_p"},
+        {"name": "C_m_0"},
+        {"name": "C_m_alpha"},
+        {"name": "C_m_delta_e"},
+        {"name": "C_m_fp"},
+        {"name": "C_m_q"},
+        {"name": "C_n_0"},
+        {"name": "C_n_beta"},
+        {"name": "C_n_delta_a"},
+        {"name": "C_n_p"},
+        {"name": "C_prop"},
+        {"name": "M"},
+        {"name": "a_0"},
+        {"name": "k_Omega"},
+        {"name": "k_T_P"},
+        {"name": "k_motor"},
+        {"name": "mass"}
+      ]
+    },
+    "dt": {
+      "low": 0.03,
+      "high": 0.08
+    }
   },
   "render": {
     "plot_action": false,
