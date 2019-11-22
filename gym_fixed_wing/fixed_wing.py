@@ -901,7 +901,8 @@ class FixedWingAircraft(gym.Env):
 
     def get_simulator_parameters(self, normalize=True):
         res = []
-        for param in self.cfg["simulator"]["model"]["parameters"]:
+        parameters = self.cfg["simulator"].get("model", {}).get("parameters", [])
+        for param in parameters:
             val = self.simulator.params[param["name"]]
             if normalize:
                 var_type = self.cfg["simulator"]["model"].get("var_type", "relative")
