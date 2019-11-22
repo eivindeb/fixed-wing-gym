@@ -18,7 +18,7 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.3
+        "var": 0.55
       },
       {
         "name": "pitch",
@@ -27,7 +27,7 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.15
+        "var": 0.39
       },
       {
         "name": "Va",
@@ -35,7 +35,7 @@
         "high": 70,
         "type": "state",
         "mean": 21,
-        "var": 2
+        "var": 1.41
       },
       {
         "name": "omega_p",
@@ -44,7 +44,7 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.94
+        "var": 0.97
       },
       {
         "name": "omega_q",
@@ -53,7 +53,7 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.94
+        "var": 0.97
       },
       {
         "name": "omega_r",
@@ -62,40 +62,40 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.94
+        "var": 0.97
       },
       {
         "name": "roll",
         "type": "target",
         "value": "absolute",
         "mean": 0,
-        "var": 0.16
+        "var": 0.4
       },
       {
         "name": "pitch",
         "type": "target",
         "value": "absolute",
         "mean": 0,
-        "var": 0.05
+        "var": 0.224
       },
       {
         "name": "Va",
         "type": "target",
         "value": "absolute",
         "mean": 0,
-        "var": 2
+        "var": 1.41
       },
       {
         "name": "alpha",
         "type": "state",
         "mean": 0,
-        "var": 0.1
+        "var": 0.31
       },
       {
         "name": "beta",
         "type": "state",
         "mean": 0,
-        "var": 0.1
+        "var": 0.31
       },
       {
         "name": "elevator",

@@ -862,7 +862,7 @@ class FixedWingAircraft(gym.Env):
                     val += init_noise
                 if self.obs_norm and obs_var.get("norm", True):
                     val -= obs_var["mean"]
-                    val /= obs_var["var"]
+                    val /= np.sqrt(obs_var["var"])
                 if noise is not None:
                     val += self.np_random.normal(loc=noise["mean"], scale=noise["var"])
                 obs_i.append(val)
@@ -914,7 +914,7 @@ class FixedWingAircraft(gym.Env):
                         if original_value == 0:
                             continue
                         var *= original_value
-                    val = val / var
+                    val = val / np.sqrt(var)
             res.append(val)
 
         return res
