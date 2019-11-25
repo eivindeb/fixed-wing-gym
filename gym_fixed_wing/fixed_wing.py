@@ -874,7 +874,7 @@ class FixedWingAircraft(gym.Env):
                     val -= obs_var["mean"]
                     val /= np.sqrt(obs_var["var"])
                 if noise is not None:
-                    val += self.np_random.normal(loc=noise["mean"], scale=noise["var"])
+                    val += self.np_random.normal(loc=noise["mean"], scale=noise["var"]) * obs_var.get("noise_weight", 1)
                 obs_i.append(val)
             if self.cfg["observation"]["shape"] == "vector":
                 obs.extend(obs_i)
@@ -1149,6 +1149,10 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         self.goal_means = np.array([goal["mean"] for goal in self.cfg["observation"]["goals"]])
         self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
 
+        noise = self.cfg["observation"].get("noise", None)
+        if noise is not None:
+            self.goal_noise = np.array([goal["noise_weight"] for goal in self.cfg["observation"]["goals"]])
+
         if len(self.observation_space.shape) == 1:
             goal_space_shape = (len(self.goal_states),)
         else:
@@ -1180,6 +1184,11 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         if self.cfg["observation"]["length"] > 1:
             achieved_goal = np.repeat(achieved_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
             desired_goal = np.repeat(desired_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
+
+        noise = self.cfg["observation"].get("noise", None)
+        if noise is not None:
+            achieved_goal += self.np_random.normal(noise["mean"], noise["var"],
+                                                   size=(self.observation_space["achieved_goal"].shape)) * self.goal_noise
 
         obs = dict(
             desired_goal=desired_goal,

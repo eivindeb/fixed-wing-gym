@@ -8,7 +8,7 @@
     "normalize": false,
     "noise": {
       "mean": 0,
-      "var": 0.1
+      "var": 1
     },
     "states": [
       {
@@ -18,7 +18,8 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.55
+        "var": 0.55,
+        "noise_weight": 0.0062
       },
       {
         "name": "pitch",
@@ -27,7 +28,8 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.39
+        "var": 0.39,
+        "noise_weight": 0.0062
       },
       {
         "name": "Va",
@@ -35,7 +37,8 @@
         "high": 70,
         "type": "state",
         "mean": 21,
-        "var": 1.41
+        "var": 1.41,
+        "noise_weight": 0.0015
       },
       {
         "name": "omega_p",
@@ -44,7 +47,8 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.97
+        "var": 0.97,
+        "noise_weight": 0.0016
       },
       {
         "name": "omega_q",
@@ -53,7 +57,8 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.97
+        "var": 0.97,
+        "noise_weight": 0.0016
       },
       {
         "name": "omega_r",
@@ -62,7 +67,8 @@
         "convert_to_radians": true,
         "type": "state",
         "mean": 0,
-        "var": 0.97
+        "var": 0.97,
+        "noise_weight": 0.0016
       },
       {
         "name": "roll",
