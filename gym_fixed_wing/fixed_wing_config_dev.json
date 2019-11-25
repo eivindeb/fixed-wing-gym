@@ -356,8 +356,10 @@
       ]
     },
     "dt": {
-      "low": 0.03,
-      "high": 0.08
+      "type": "exponential",
+      "base": 0.04,
+      "low": 125,
+      "high": 1000
     }
   },
   "render": {
