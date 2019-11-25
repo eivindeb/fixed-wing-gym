@@ -204,6 +204,8 @@ class FixedWingAircraft(gym.Env):
 
         self.sampler = sampler
 
+        self.step_size_lambda = None
+
         self.prev_shaping = {}
 
         self._curriculum_level = None
@@ -304,6 +306,7 @@ class FixedWingAircraft(gym.Env):
             state = {}
             for init_state in ["roll", "pitch", "velocity_u"]:
                 state[init_state] = self.sampler.draw_sample(init_state)
+        self.step_size_lambda = None
         self.simulator.reset(state)
         self.sample_simulator_parameters()
         self.sample_target()
@@ -361,6 +364,9 @@ class FixedWingAircraft(gym.Env):
 
         info = {}
         done = False
+
+        if self.step_size_lambda is not None:
+            self.simulator.dt = self.step_size_lambda()
 
         if self.steps_count >= self.steps_max > 0:
             done = True
@@ -593,10 +599,14 @@ class FixedWingAircraft(gym.Env):
                     if probs is not None:
                         probs = np.array(probs)
                     val = self.np_random.choice(value["values"], p=probs)
-                else:
+                elif value["type"] == "uniform":
                     val = self.np_random.uniform(value["low"], value["high"])
                     if isinstance(value["low"], bool):
                         val = bool(val)
+                elif value["type"] == "exponential":
+                    rate = self.np_random.uniform(value["low"], value["high"])
+                    self.step_size_lambda = lambda: value["base"] + self.np_random.exponential(1 / rate)
+                    val = self.step_size_lambda()
                 setattr(self.simulator, key, val)
 
     def render(self, mode="plot", show=True, close=True, block=False, save_path=None):
