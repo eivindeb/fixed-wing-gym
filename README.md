@@ -72,7 +72,8 @@ If "done", the episode is terminated, if "new", a new target is sampled, if "non
     * **low** Float. Sets the minimum desired value for the target state.
     * **high** Float. Sets the maximum desired value for the target state.
     * **bound** Float. Sets the goal bounds around the desired value for the target state. If current value of state is inside this bound, the goal criterion for this state is satisfied.
-    * **delta** Float. Sets the maximum difference in initial condition for state and the desired target value of that state.
+    * **delta** Float. Sets the maximum difference in initial condition for state and the desired target value of that state. If delta is specified,
+    the specified minimum and maximum desired values may be violated, i.e. delta takes precedence over low and high.
     * **class** String. One of ["constant", "linear", "sinusoidal"]. Sets the type of target. If "constant", 
     the target value is held constant throughout the episode (or alternatively until resampled), if "linear", a linear function is sampled
     for the target, if "sinusoidal" a sinusoidal function is sampled for the target state.
