@@ -118,7 +118,7 @@ Arguments defined in the simulator block overwrites the equivalent argument in t
 can be included in the curriculum level functionality.
 
 * **states** List. The states listed here are included in the curriculum, and have their arguments scaled according to
-curriculum_level * ([maximum or minimum] - arithmetic midpoint).
+curriculum_level * ([maximum or minimum] - midpoint).
     * **name** String. Name of state. See PyFly documentation for other state arguments (init, constraint etc.)
 
 ### Render
