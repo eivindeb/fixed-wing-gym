@@ -1189,7 +1189,7 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
             desired_goal = np.repeat(desired_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
 
         noise = self.cfg["observation"].get("noise", None)
-        if noise is not None:
+        if noise is not None and noise["var"] > 0:
             achieved_goal += self.np_random.normal(noise["mean"], noise["var"],
                                                    size=(self.observation_space["achieved_goal"].shape)) * self.goal_noise
 
