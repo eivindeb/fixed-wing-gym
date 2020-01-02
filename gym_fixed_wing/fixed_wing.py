@@ -1175,10 +1175,6 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
                 range(len(self.cfg["observation"]["states"]),
                 len(self.cfg["observation"]["states"]) + 2 * len(self.goal_states))))
 
-    def reset(self, state=None, target=None):
-        super(FixedWingAircraftGoal, self).reset()
-        return super(FixedWingAircraftGoal, self).reset(state, target)
-
     def get_observation(self):
         def scale_goal_states(states, m, v):
             states = np.array(states)
