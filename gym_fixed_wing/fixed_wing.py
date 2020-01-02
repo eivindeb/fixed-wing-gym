@@ -579,20 +579,17 @@ class FixedWingAircraft(gym.Env):
                 param_value_clip = value.get("clip", None)
                 for param_arguments in value["parameters"]:
                     orig_param_value = param_arguments.get("original", None)
+                    var = param_arguments.get("var", param_value_var)
                     if orig_param_value is None:
                         orig_param_value = self.simulator.params[param_arguments["name"]]
                         param_arguments["original"] = orig_param_value
-                    if orig_param_value == 0:
-                        continue
-
-                    var = param_arguments.get("var", param_value_var)
-                    if value["var_type"] == "relative":
+                    if orig_param_value != 0 and value["var_type"] == "relative":
                         var *= np.abs(orig_param_value)
                     if dist_type == "gaussian":
                         param_value = self.np_random.normal(loc=orig_param_value, scale=var)
                         clip = param_arguments.get("clip", param_value_clip)
                         if clip is not None:
-                            if value["var_type"] == "relative":
+                            if orig_param_value != 0 and value["var_type"] == "relative":
                                 clip *= np.abs(orig_param_value)
                             param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
                     elif dist_type == "uniform":
@@ -925,17 +922,19 @@ class FixedWingAircraft(gym.Env):
             if normalize:
                 var_type = self.cfg["simulator"]["model"].get("var_type", "relative")
                 var = param.get("var", self.cfg["simulator"]["model"]["var"])
-                val = val - param.get("original", 0)
+                original_value = param.get("original", self.simulator.params[param["name"]])
+                val = val - original_value
                 if var != 0:
                     if var_type == "relative":
-                        original_value = param.get("original", self.simulator.params[param["name"]])
-                        if original_value == 0:
-                            continue
-                        var *= original_value
-                    val = val / np.sqrt(var)
+                        if original_value != 0 and var_type == "relative":
+                            var *= np.abs(original_value)
+                    val = val / var#np.sqrt(var)
             res.append(val)
 
         return res
+
+    def get_env_parameters(self, normalize=True):
+        return self.get_simulator_parameters(normalize)
 
     def _get_error(self, state):
         """
