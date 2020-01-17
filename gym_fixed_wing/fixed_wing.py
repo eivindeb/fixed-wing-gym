@@ -1182,8 +1182,11 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         obs = super(FixedWingAircraftGoal, self).get_observation()
 
         # TODO: might have to do some smart pattern thing here
-        achieved_goal = scale_goal_states([self.simulator.state[goal_state].value for goal_state in self.goal_states], self.goal_means, self.goal_vars)
-        desired_goal = scale_goal_states([self.target[state] for state in self.goal_states], self.goal_means, self.goal_vars)
+        achieved_goal = [self.simulator.state[goal_state].value for goal_state in self.goal_states]
+        desired_goal = [self.target[state] for state in self.goal_states]
+        if self.obs_norm:
+            achieved_goal = scale_goal_states(achieved_goal, self.goal_means, self.goal_vars)
+            desired_goal = scale_goal_states(desired_goal, self.goal_means, self.goal_vars)
         if self.cfg["observation"]["length"] > 1:
             achieved_goal = np.repeat(achieved_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
             desired_goal = np.repeat(desired_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
