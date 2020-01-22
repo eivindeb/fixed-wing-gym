@@ -1153,8 +1153,9 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
                                                 )
 
         self.goal_states = [goal["name"] for goal in self.cfg["observation"]["goals"]]
-        self.goal_means = np.array([goal["mean"] for goal in self.cfg["observation"]["goals"]])
-        self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
+        if self.obs_norm:
+            self.goal_means = np.array([goal["mean"] for goal in self.cfg["observation"]["goals"]])
+            self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
 
         noise = self.cfg["observation"].get("noise", None)
         if noise is not None:
@@ -1221,8 +1222,9 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         original_values = {"achieved": {}, "desired": {}, "action_history": copy.deepcopy(self.history["action"]),
                            "steps_count": self.steps_count}
 
-        achieved_goal = achieved_goal * self.goal_vars + self.goal_means
-        desired_goal = desired_goal * self.goal_vars + self.goal_means
+        if self.obs_norm:
+            achieved_goal = achieved_goal * self.goal_vars + self.goal_means
+            desired_goal = desired_goal * self.goal_vars + self.goal_means
 
         action = info.get("action", np.array(np.zeros(shape=(len(self.cfg["action"]["states"])))))
         self.history["action"] = self.history["action"][:info["step"]] # TODO: this assumes that this function is called with transitions from the trajectory currently saved in the environment (might not work for multiprocessing etc., and if reset)
