@@ -23,10 +23,13 @@ class FixedWingAircraft(gym.Env):
 
         def set_config_attrs(parent, kws):
             for attr, val in kws.items():
-                if isinstance(val, dict) or isinstance(parent[attr], list):
-                    set_config_attrs(parent[attr], val)
-                else:
-                    parent[attr] = val
+                try:
+                    if isinstance(val, dict) or isinstance(parent[attr], list):
+                        set_config_attrs(parent[attr], val)
+                    else:
+                        parent[attr] = val
+                except KeyError:
+                    continue
 
         with open(config_path) as config_file:
             self.cfg = json.load(config_file)
