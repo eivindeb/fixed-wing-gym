@@ -840,7 +840,7 @@ class FixedWingAircraft(gym.Env):
             if i > self.steps_count:
                 i = self.steps_count + 1
                 if self.cfg["observation"]["length"] > 1:
-                    init_noise = self.np_random.uniform(-1, 1) * self.simulator.dt
+                    init_noise = self.np_random.normal(loc=0, scale=0.5) * self.simulator.dt
             for obs_var in self.cfg["observation"]["states"]:
                 if obs_var["type"] == "state":
                     val = self.simulator.state[obs_var["name"]].history[-i]
@@ -876,8 +876,8 @@ class FixedWingAircraft(gym.Env):
                             val = np.sum(np.abs(np.diff(self.simulator.state[obs_var["name"]].history["command"][low_idx:high_idx])), dtype=np.float32)
                 else:
                     raise Exception("Unexpected observation variable type: {}".format(obs_var["type"]))
-                if init_noise is not None:  # TODO: maybe scale with state range?
-                    val += init_noise
+                if init_noise is not None and not obs_var["type"] == "target":
+                    val += init_noise  # TODO: maybe scale with state range?
                 if self.obs_norm and obs_var.get("norm", True):
                     val -= obs_var["mean"]
                     val /= np.sqrt(obs_var["var"])
