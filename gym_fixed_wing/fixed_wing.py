@@ -1156,12 +1156,17 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
                                                 )
 
         self.goal_states = [goal["name"] for goal in self.cfg["observation"]["goals"]]
+
         self.goal_means = np.array([goal["mean"] for goal in self.cfg["observation"]["goals"]])
         self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
 
-        noise = self.cfg["observation"].get("noise", None)
-        if noise is not None:
-            self.goal_noise = np.array([goal["noise_weight"] for goal in self.cfg["observation"]["goals"]])
+        for goal_type in ["achieved", "desired"]:
+            for state in self.cfg["observation"]["goals"]:
+                state = copy.deepcopy(state)
+                if goal_type == "desired":
+                    state["type"] = "target"
+                    state["value"] = "absolute"
+                self.cfg["observation"]["states"].append(state)
 
         if len(self.observation_space.shape) == 1:
             goal_space_shape = (len(self.goal_states),)
@@ -1179,25 +1184,8 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
                 len(self.cfg["observation"]["states"]) + 2 * len(self.goal_states))))
 
     def get_observation(self):
-        def scale_goal_states(states, m, v):
-            states = np.array(states)
-            return (states - m) / v
         obs = super(FixedWingAircraftGoal, self).get_observation()
-
-        # TODO: might have to do some smart pattern thing here
-        achieved_goal = [self.simulator.state[goal_state].value for goal_state in self.goal_states]
-        desired_goal = [self.target[state] for state in self.goal_states]
-        if self.obs_norm:
-            achieved_goal = scale_goal_states(achieved_goal, self.goal_means, self.goal_vars)
-            desired_goal = scale_goal_states(desired_goal, self.goal_means, self.goal_vars)
-        if self.cfg["observation"]["length"] > 1:
-            achieved_goal = np.repeat(achieved_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
-            desired_goal = np.repeat(desired_goal[np.newaxis, :], self.cfg["observation"]["length"], axis=0)
-
-        noise = self.cfg["observation"].get("noise", None)
-        if noise is not None and noise["var"] > 0:
-            achieved_goal += self.np_random.normal(noise["mean"], noise["var"],
-                                                   size=(self.observation_space["achieved_goal"].shape)) * self.goal_noise
+        obs, achieved_goal, desired_goal = np.split(obs, [-len(self.goal_states) * 2, -len(self.goal_states)], axis=-1)
 
         obs = dict(
             desired_goal=desired_goal,
