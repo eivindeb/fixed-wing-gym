@@ -198,6 +198,7 @@ class FixedWingAircraft(gym.Env):
         self._target_props = None
         self._target_props_init = None
         self._rew_factors_init = copy.deepcopy(self.cfg["reward"]["factors"])
+        self._sim_model = copy.deepcopy(self.cfg["simulator"].get("model", {}))
 
         self.training = False
         self.render_on_reset = False
@@ -247,6 +248,10 @@ class FixedWingAircraft(gym.Env):
                         if convert_to_radians:
                             val = np.radians(val)
                     setattr(self.simulator.state[state_name], prop, val)
+
+        if "model" in self.cfg["simulator"]:
+            self._sim_model["var"] = self.cfg["simulator"]["model"]["var"] * level
+            self._sim_model["clip"] = self.cfg["simulator"]["model"]["clip"] * level
 
         self._target_props_init = {"states": {}}
         for attr, val in self.cfg["target"].items():
@@ -567,55 +572,54 @@ class FixedWingAircraft(gym.Env):
             ang_rates = ["omega_q", "omega_r", "omega_p"]
             self.target.update({state: self._attitude_to_angular_rates(state) for state in ang_rates})
 
-    def sample_simulator_parameters(self):
+    def sample_simulator_parameters(self):  # TODO: generalize
         """
         Sample and set variables and parameters (of UAV mathematical model) of simulator, as specified by simulator
         block in config file.
         :return:
         """
-        for key, value in self.cfg["simulator"].items():
-            if key == "states":
-                continue  # PyFly has its own state randomization procedures
-            elif key == "model":
-                dist_type = value.get("distribution", "gaussian")
-                param_value_var = value["var"]
-                param_value_clip = value.get("clip", None)
-                for param_arguments in value["parameters"]:
-                    orig_param_value = param_arguments.get("original", None)
-                    var = param_arguments.get("var", param_value_var)
-                    if orig_param_value is None:
-                        orig_param_value = self.simulator.params[param_arguments["name"]]
-                        param_arguments["original"] = orig_param_value
-                    if orig_param_value != 0 and value["var_type"] == "relative":
-                        var *= np.abs(orig_param_value)
-                    if dist_type == "gaussian":
-                        param_value = self.np_random.normal(loc=orig_param_value, scale=var)
-                        clip = param_arguments.get("clip", param_value_clip)
-                        if clip is not None:
-                            if orig_param_value != 0 and value["var_type"] == "relative":
-                                clip *= np.abs(orig_param_value)
-                            param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
-                    elif dist_type == "uniform":
-                        param_value = self.np_random.uniform(low=orig_param_value - var, high=orig_param_value + var)
-                    else:
-                        raise ValueError("Unexpected distribution type {}".format(dist_type))
-
-                    self.simulator.params[param_arguments["name"]] = param_value
+        dist_type = self._sim_model.get("distribution", "gaussian")
+        param_value_var = self._sim_model.get("var", 0.1)
+        param_value_clip = self._sim_model.get("clip", None)
+        var_type = self._sim_model.get("var_type", "relative")
+        for param_arguments in self._sim_model["parameters"]:
+            orig_param_value = param_arguments.get("original", None)
+            var = param_arguments.get("var", param_value_var)
+            if orig_param_value is None:
+                orig_param_value = self.simulator.params[param_arguments["name"]]
+                param_arguments["original"] = orig_param_value
+            if orig_param_value != 0 and var_type == "relative":
+                var *= np.abs(orig_param_value)
+            if dist_type == "gaussian":
+                param_value = self.np_random.normal(loc=orig_param_value, scale=var)
+                clip = param_arguments.get("clip", param_value_clip)
+                if clip is not None:
+                    if orig_param_value != 0 and var_type == "relative":
+                        clip *= np.abs(orig_param_value)
+                    param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
+            elif dist_type == "uniform":
+                param_value = self.np_random.uniform(low=orig_param_value - var, high=orig_param_value + var)
             else:
-                if "values" in value:
-                    probs = value.get("probabilities", None)
-                    if probs is not None:
-                        probs = np.array(probs)
-                    val = self.np_random.choice(value["values"], p=probs)
-                elif value["type"] == "uniform":
-                    val = self.np_random.uniform(value["low"], value["high"])
-                    if isinstance(value["low"], bool):
-                        val = bool(val)
-                elif value["type"] == "exponential":
-                    rate = self.np_random.uniform(value["low"], value["high"])
-                    self.step_size_lambda = lambda: value["base"] + self.np_random.exponential(1 / rate)
-                    val = self.step_size_lambda()
-                setattr(self.simulator, key, val)
+                raise ValueError("Unexpected distribution type {}".format(dist_type))
+
+            self.simulator.params[param_arguments["name"]] = param_value
+
+        step_length_properties = self.cfg["simulator"].get("dt", None)
+        if step_length_properties is not None:
+            if "values" in step_length_properties:
+                probs = step_length_properties.get("probabilities", None)
+                if probs is not None:
+                    probs = np.array(probs)
+                val = self.np_random.choice(step_length_properties["values"], p=probs)
+            elif step_length_properties["type"] == "uniform":
+                val = self.np_random.uniform(step_length_properties["low"], step_length_properties["high"])
+                if isinstance(step_length_properties["low"], bool):
+                    val = bool(val)
+            elif step_length_properties["type"] == "exponential":
+                rate = self.np_random.uniform(step_length_properties["low"], step_length_properties["high"])
+                self.step_size_lambda = lambda: step_length_properties["base"] + self.np_random.exponential(1 / rate)
+                val = self.step_size_lambda()
+            self.simulator.dt = val
 
     def render(self, mode="plot", show=True, close=True, block=False, save_path=None):
         """
@@ -919,12 +923,12 @@ class FixedWingAircraft(gym.Env):
 
     def get_simulator_parameters(self, normalize=True):
         res = []
-        parameters = self.cfg["simulator"].get("model", {}).get("parameters", [])
+        parameters = self._sim_model.get("parameters", [])
         for param in parameters:
             val = self.simulator.params[param["name"]]
             if normalize:
-                var_type = self.cfg["simulator"]["model"].get("var_type", "relative")
-                var = param.get("var", self.cfg["simulator"]["model"]["var"])
+                var_type = self._sim_model.get("var_type", "relative")
+                var = param.get("var", self._sim_model["var"])
                 original_value = param.get("original", self.simulator.params[param["name"]])
                 val = val - original_value
                 if var != 0:
