@@ -931,7 +931,7 @@ class FixedWingAircraft(gym.Env):
             val = self.simulator.params[param["name"]]
             if normalize:
                 var_type = self._sim_model.get("var_type", "relative")
-                var = param.get("var", self._sim_model["var"])
+                var = param.get("var", self.cfg["simulator"]["model"]["var"])
                 original_value = param.get("original", self.simulator.params[param["name"]])
                 val = val - original_value
                 if var != 0:
