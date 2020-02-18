@@ -866,21 +866,36 @@ class FixedWingAircraft(gym.Env):
                     else:
                         raise ValueError("Unexpected observation variable target value type: {}".format(obs_var["value"]))
                 elif obs_var["type"] == "action":
-                    if self.steps_count - i < 0:
-                        val = self.simulator.state[obs_var["name"]].value
-                        if self.scale_actions:
-                            a_i = action_indexes[obs_var["name"]]
-                            action = np.zeros(shape=(len(action_indexes)))
-                            action[a_i] = val
-                            val = self.linear_action_scaling(action, direction="backward")[a_i]
-                    else:
-                        window_size = obs_var.get("window_size", 1)
-                        low_idx, high_idx = -window_size - i + 1, None if i == 1 else -(i - 1)
-                        if self.scale_actions:
-                            a_i = action_indexes[obs_var["name"]]
-                            val = np.sum(np.abs(np.diff([a[a_i] for a in self.history["action"][low_idx:high_idx]])), dtype=np.float32)
+                    if obs_var["value"] == "delta":
+                        if self.steps_count - i < 0:
+                            val = self.simulator.state[obs_var["name"]].value
+                            if self.scale_actions:
+                                a_i = action_indexes[obs_var["name"]]
+                                action = np.zeros(shape=(len(action_indexes)))
+                                action[a_i] = val
+                                val = self.linear_action_scaling(action, direction="backward")[a_i]
                         else:
-                            val = np.sum(np.abs(np.diff(self.simulator.state[obs_var["name"]].history["command"][low_idx:high_idx])), dtype=np.float32)
+                            window_size = obs_var.get("window_size", 1)
+                            low_idx, high_idx = -window_size - i + 1, None if i == 1 else -(i - 1)
+                            if self.scale_actions:
+                                a_i = action_indexes[obs_var["name"]]
+                                val = np.sum(np.abs(np.diff([a[a_i] for a in self.history["action"][low_idx:high_idx]])), dtype=np.float32)
+                            else:
+                                val = np.sum(np.abs(np.diff(self.simulator.state[obs_var["name"]].history["command"][low_idx:high_idx])), dtype=np.float32)
+                    elif obs_var["value"] == "absolute":
+                        if self.steps_count - i < 0:
+                            val = self.simulator.state[obs_var["name"]].value
+                            if self.scale_actions:
+                                a_i = action_indexes[obs_var["name"]]
+                                action = np.zeros(shape=(len(action_indexes)))
+                                action[a_i] = val
+                                val = self.linear_action_scaling(action, direction="backward")[a_i]
+                        else:
+                            if self.scale_actions:
+                                a_i = action_indexes[obs_var["name"]]
+                                val = self.history["action"][-i][a_i]
+                            else:
+                                val = self.simulator.state[obs_var["name"]].history["command"][-i]
                 else:
                     raise Exception("Unexpected observation variable type: {}".format(obs_var["type"]))
                 if init_noise is not None and not obs_var["type"] == "target":
