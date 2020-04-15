@@ -131,5 +131,23 @@ are added as subplots to the PyFly render output.
 * **plot_target** Boolean. Plot the desired values of each target state as a dashed line in the corresponding state plot.
 * **plot_goal** Boolean. Plot when the goal criterion is satisfied for the target state as a shaded region around the desired value with size bound.
 
+### Metrics
+The metric block controls what metrics are calculated at the end of the episode and made available to the reinforcement learning framework in the info dictionary at episode termination.
+It consists of a list of dictionaries with a required name and optional arguments, e.g. "low" and "high" limits for rise time.
+
+* **name** String. Name of metric.
+
+The available metrics are:
+* **avg_error** The error of current to reference value in the target states averaged over the simulation steps and weighted by the inital error. Is set to np.nan if initial error is less than 0.01.
+* **control_variation** The average change in actuator commands per second, where the average is taken over simulation steps and actuators.
+* **end_error** The error of current to reference value at the last simulation step.
+* **overshoot** The maximum error achieved on the opposing side of the reference value wrt. the initial error, as a fraction of the initial error. Is set to np.nan if the state value never crosses the setpoint value.
+* **rise_time** The number of simulation steps it takes to reduce the reference value error from high fraction of initial error to low fraction. High and low thresholds are configurable, with defaults 0.9 and 0.1.
+* **settle_time** The number of simulation steps it takes to settle within the goal bounds, i.e. never exiting the bounds from that point.
+* **success** Whether or not the goal is achieved.
+* **success_time_frac** The fraction of simulation steps for which the error in the target states is lower than the target bounds.
+* **total_error** The error of current to reference value in the target states summed over the simulation steps.
+
+
  
 

@@ -416,7 +416,7 @@ class FixedWingAircraft(gym.Env):
             obs = self.get_observation()
 
         if done:
-            for metric in self.cfg["metrics"]:
+            for metric in self.cfg.get("metrics"):
                 info[metric["name"]] = self.get_metric(metric["name"], **metric)
 
             if self.sampler is not None:
