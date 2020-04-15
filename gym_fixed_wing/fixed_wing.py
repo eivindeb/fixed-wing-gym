@@ -444,12 +444,7 @@ class FixedWingAircraft(gym.Env):
             # TODO: should handle multiple targets
             info["total_error"] = {}
             for target_state, errors in self.history["error"].items():
-                target_values = np.array(self.history["target"][target_state])
-                std_traj = np.array(self._get_standard_trajectory(target_state))
-                step_min = min([len(errors), std_traj.shape[0], target_values.shape[0]])
-                trajectory_error = np.sum(np.abs(errors[:step_min]))
-                std_traj_error = np.sum(np.abs(target_values[:step_min] - std_traj[:step_min]))
-                info["total_error"][target_state] = trajectory_error / std_traj_error
+                info["total_error"][target_state] = np.sum(errors)
 
             info["end_error"] = {k: np.abs(np.mean(v[-50:])) for k, v in self.history["error"].items()}
 
@@ -1063,55 +1058,6 @@ class FixedWingAircraft(gym.Env):
                 res[state] = np.sign(res[state]) * (np.abs(res[state]) % np.pi - np.pi)
 
         return res
-
-    def _get_standard_trajectory(self, state, initial_value=None, end_value=None, steps=None):
-        if initial_value is None:
-            initial_value = self.simulator.state[state].history[0]
-
-        if steps is None:
-            steps = self.steps_count
-
-        if state == "roll":
-            if end_value is None:
-                end_value = self.history["target"][state][-1]
-            delta = initial_value - end_value
-            L, k, x0, c = delta * 1.18, -0.025, 70, end_value
-
-            values = [L / (1 + np.exp(- k * (step - x0))) + c for step in range(steps)]
-            offset = np.radians(0.5)
-            values = [v + (offset - np.abs(v - end_value) if np.abs(v - end_value) < offset else 0) for v in values]
-        elif state == "pitch":
-            if end_value is None:
-                end_value = self.history["target"][state][-1]
-            delta = initial_value - end_value
-            delta_pitch_max = 40
-            delta_mag = min(1, np.abs(delta) / delta_pitch_max)
-            k = -(0.25 - delta_mag * 0.15)
-            x0 = 15 + delta_mag * 20
-            L, c = delta * 1.02, np.sign(delta) * delta * 0.005 + end_value
-
-            values = [L / (1 + np.exp(- k * (step - x0))) + c for step in range(steps)]
-
-            offset = np.radians(0.5)
-            values = [v + (offset - np.abs(v - end_value) if np.abs(v - end_value) < offset else 0) for v in values]
-        elif state == "Va":
-            if end_value is None:
-                end_value = self.history["target"][state]
-            values = [initial_value]
-            offset = 0.1
-            for step in range(steps - 1):
-                if isinstance(end_value, list):
-                    end_value_i = end_value[step]
-                else:
-                    end_value_i = end_value
-                val = values[step] + (end_value_i - values[step]) * 1 / 75
-                if np.abs(val - end_value_i) < offset:
-                    val += offset - np.abs(val - end_value_i)
-                values.append(val)
-        else:
-            raise ValueError("Non target state {} in _get_standard_trajectory".format(state))
-
-        return values
 
     def _attitude_to_angular_rates(self, state):
         max_vel = self._target_props[state].get("max_vel", np.radians(180))
