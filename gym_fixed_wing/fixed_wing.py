@@ -416,41 +416,8 @@ class FixedWingAircraft(gym.Env):
             obs = self.get_observation()
 
         if done:
-            info["avg_error"] = {k: np.abs(np.mean(v) / v[0]) if np.abs(v[0]) >= 0.1 else np.nan for k, v in
-                                  self.history["error"].items()}
-
-            # TODO: should handle multiple targets
-            info["total_error"] = {}
-            for target_state, errors in self.history["error"].items():
-                target_values = np.array(self.history["target"][target_state])
-                std_traj = np.array(self._get_standard_trajectory(target_state))
-                step_min = min([len(errors), std_traj.shape[0], target_values.shape[0]])
-                trajectory_error = np.sum(np.abs(errors[:step_min]))
-                std_traj_error = np.sum(np.abs(target_values[:step_min] - std_traj[:step_min]))
-                info["total_error"][target_state] = trajectory_error / std_traj_error
-
-            info["end_error"] = {k: np.abs(np.mean(v[-50:])) for k, v in self.history["error"].items()}
-
-            control_commands = np.array([self.simulator.state[actuator["name"]].history["command"] for actuator in self.cfg["action"]["states"]])
-            delta_controls = np.diff(control_commands, axis=1)
-            info["control_variation"] = np.sum(np.abs(delta_controls)) / (3 * self.simulator.dt * delta_controls.shape[1])
-            info["settle_time"] = {}
-            info["success"] = {}
-            for state, goal_status in self.history["goal"].items():
-                streak = deque(maxlen=self.cfg["target"]["success_streak_req"])
-                settle_time = np.nan
-                success = False
-                for i, step_goal in enumerate(goal_status):
-                    streak.append(step_goal)
-                    if len(streak) == self.cfg["target"]["success_streak_req"] and np.mean(streak) >= \
-                            self.cfg["target"]["success_streak_fraction"]:
-                        settle_time = i
-                        success = True
-                        break
-                info["settle_time"][state] = settle_time
-                info["success"][state] = success
-
-            info["success_time_frac"] = {k: np.mean(v) for k, v in self.history["goal"].items()}
+            for metric in self.cfg["metrics"]:
+                info[metric["name"]] = self.get_metric(metric["name"], **metric)
 
             if self.sampler is not None:
                 for state in self.history["target"]:
@@ -1122,6 +1089,75 @@ class FixedWingAircraft(gym.Env):
 
         return res
 
+    def get_metric(self, metric, **metric_kw):
+        res = {}
+
+        if metric == "avg_error":
+            res = {k: np.abs(np.mean(v) / v[0]) if np.abs(v[0]) >= 0.01 else np.nan for k, v in
+                                 self.history["error"].items()}
+
+        if metric == "total_error":
+            # TODO: should handle multiple targets
+            res = {k: np.sum(np.abs(v)) for k, v in self.history["error"].items()}
+
+        if metric == "end_error":
+            res = {k: np.abs(np.mean(v[-50:])) for k, v in self.history["error"].items()}
+
+        if metric == "control_variation":
+            control_commands = np.array([self.simulator.state[actuator["name"]].history["command"] for actuator in
+                                         self.cfg["action"]["states"]])
+            delta_controls = np.diff(control_commands, axis=1)
+            res["all"] = np.sum(np.abs(delta_controls)) / (
+                        3 * self.simulator.dt * delta_controls.shape[1])
+
+        if metric in ["success", "settle_time"]:
+            for state, goal_status in self.history["goal"].items():
+                streak = deque(maxlen=self.cfg["target"]["success_streak_req"])
+                settle_time = np.nan
+                success = False
+                for i, step_goal in enumerate(goal_status):
+                    streak.append(step_goal)
+                    if len(streak) == self.cfg["target"]["success_streak_req"] and np.mean(streak) >= \
+                            self.cfg["target"]["success_streak_fraction"]:
+                        settle_time = i
+                        success = True
+                        break
+                res[state] = success if metric == "success" else settle_time
+
+        if metric == "rise_time":
+            rise_low, rise_high = metric_kw.get("low", 0.1), metric_kw.get("high", 0.9)
+            # TODO: per goal if sampled multiple goals in epsiode
+            for goal_var_name, errors in self.history["error"].items():
+                initial_error = errors[0]
+                rise_end = np.nan
+                rise_start = np.nan
+                for j, error in enumerate(reversed(errors)):
+                    error = np.abs(error)
+                    if j > 0:
+                        prev_error = np.abs(errors[-j])
+                        low_lim = np.abs(rise_low * initial_error)
+                        high_lim = np.abs(rise_high * initial_error)
+                        if error >= low_lim and prev_error < low_lim:
+                            rise_end = self.steps_count - j
+                        if error >= high_lim and prev_error < high_lim:
+                            rise_start = self.steps_count - j
+                res[goal_var_name] = rise_end - rise_start
+
+        if metric == "overshoot":
+            for k, v in self.history["error"].items():
+                initial_error = v[0]
+                op = getattr(np, "min" if initial_error > 0 else "max")
+                max_opposite_error = op(v, axis=0)
+                if np.sign(max_opposite_error) == np.sign(initial_error):
+                    res[k] = np.nan
+                else:
+                    res[k] = np.abs(max_opposite_error / initial_error)
+
+        if metric == "success_time_frac":
+            res = {k: np.mean(v) for k, v in self.history["goal"].items()}
+
+        return res
+
 
 class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
     def __init__(self, config_path, sampler=None, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
@@ -1261,4 +1297,5 @@ if __name__ == "__main__":
         action = pid.get_action(phi, theta, Va, omega)
         obs, rew, done, info = env.step(action)
     env.render(block=True)
+    print("yeah")
 
