@@ -431,6 +431,8 @@ class FixedWingAircraft(gym.Env):
                     else:
                         self.sampler.add_data_point(state, self.simulator.state[state].history[0], info["success"][state])
 
+        info["target"] = self.target
+
         return obs, reward, done, info
 
     def linear_action_scaling(self, a, direction="forward"):
