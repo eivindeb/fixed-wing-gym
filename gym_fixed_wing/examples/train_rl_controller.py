@@ -38,13 +38,17 @@ def monitor_training(_locals, _globals):
     global curriculum_level, last_ep_info, info_kw, log_interval, curriculum_cooldown, render_interval, last_render, \
         render_check, model_folder, test_interval, last_test, checkpoint_save_interval, last_save, test_set_path, \
         config_path
-    if len(_locals["ep_info_buf"]) > 0 and _locals["ep_info_buf"][-1] != last_ep_info:
-        last_ep_info = _locals["ep_info_buf"][-1]
+    if "ep_info_buf" in _locals:
+        ep_info_buf = _locals["ep_info_buf"]
+    else:
+        ep_info_buf = _locals["self"].ep_info_buf
+    if len(ep_info_buf) > 0 and ep_info_buf[-1] != last_ep_info:
+        last_ep_info = ep_info_buf[-1]
 
         now = time.time()
 
         info = {}
-        for ep_info in _locals["ep_info_buf"]:
+        for ep_info in ep_info_buf:
             for k in ep_info.keys():
                 if k in info_kw:
                     if k not in info:
