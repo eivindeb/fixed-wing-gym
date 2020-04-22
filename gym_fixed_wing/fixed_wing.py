@@ -416,7 +416,7 @@ class FixedWingAircraft(gym.Env):
             obs = self.get_observation()
 
         if done:
-            for metric in self.cfg.get("metrics"):
+            for metric in self.cfg.get("metrics", []):
                 info[metric["name"]] = self.get_metric(metric["name"], **metric)
 
             if self.sampler is not None:
@@ -1110,19 +1110,19 @@ class FixedWingAircraft(gym.Env):
             res["all"] = np.sum(np.abs(delta_controls)) / (
                         3 * self.simulator.dt * delta_controls.shape[1])
 
-        if metric in ["success", "settle_time"]:
+        if metric in ["success", "settling_time"]:
             for state, goal_status in self.history["goal"].items():
                 streak = deque(maxlen=self.cfg["target"]["success_streak_req"])
-                settle_time = np.nan
+                settling_time = np.nan
                 success = False
                 for i, step_goal in enumerate(goal_status):
                     streak.append(step_goal)
                     if len(streak) == self.cfg["target"]["success_streak_req"] and np.mean(streak) >= \
                             self.cfg["target"]["success_streak_fraction"]:
-                        settle_time = i
+                        settling_time = i
                         success = True
                         break
-                res[state] = success if metric == "success" else settle_time
+                res[state] = success if metric == "success" else settling_time
 
         if metric == "rise_time":
             rise_low, rise_high = metric_kw.get("low", 0.1), metric_kw.get("high", 0.9)

@@ -308,7 +308,7 @@
       "low": 0.1
     },
     {
-      "name": "settle_time"
+      "name": "settling_time"
     },
     {
       "name": "overshoot"
