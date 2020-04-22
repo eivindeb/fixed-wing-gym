@@ -11,6 +11,11 @@ fixed-wing aircraft.
 pip install -e . --process-dependency-links
 ```
 
+## Usage
+
+The examples folder contains some scripts demonstrating how the gym can be integrated with the [stable-baselines library](https://github.com/hill-a/stable-baselines), and how to
+reproduce the results presented in the [paper](https://arxiv.org/abs/1911.05478). 
+
 ## Documentation
 
 Each functions behaviour, arguments and return values are documented with docstrings in the source code. The Fixed-Wing-Gym is configured through the configuration json file. The config file 
@@ -143,10 +148,11 @@ The available metrics are:
 * **end_error** The error of current to reference value at the last simulation step.
 * **overshoot** The maximum error achieved on the opposing side of the reference value wrt. the initial error, as a fraction of the initial error. Is set to np.nan if the state value never crosses the setpoint value.
 * **rise_time** The number of simulation steps it takes to reduce the reference value error from high fraction of initial error to low fraction. High and low thresholds are configurable, with defaults 0.9 and 0.1.
-* **settle_time** The number of simulation steps it takes to settle within the goal bounds, i.e. never exiting the bounds from that point.
+* **settling_time** The number of simulation steps it takes to settle within the goal bounds, i.e. never exiting the bounds from that point on.
 * **success** Whether or not the goal is achieved.
 * **success_time_frac** The fraction of simulation steps for which the error in the target states is lower than the target bounds.
 * **total_error** The error of current to reference value in the target states summed over the simulation steps.
+
 
 
  
