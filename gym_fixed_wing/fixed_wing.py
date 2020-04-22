@@ -196,7 +196,7 @@ class FixedWingAircraft(gym.Env):
         self._target_props_init = None
         self._rew_factors_init = copy.deepcopy(self.cfg["reward"]["factors"])
 
-        self.training = False
+        self.training = True
         self.render_on_reset = False
         self.render_on_reset_kw = {}
         self.save_on_reset = False
