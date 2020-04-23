@@ -11,9 +11,9 @@ fixed-wing aircraft.
 pip install -e . --process-dependency-links
 ```
 
-## Usage
+## Getting started
 
-The examples folder contains some scripts demonstrating how the gym can be integrated with the [stable-baselines library](https://github.com/hill-a/stable-baselines), and how to
+The [examples](gym_fixed_wing/examples) folder contains scripts demonstrating how the gym can be integrated with the [stable-baselines library](https://github.com/hill-a/stable-baselines), and how to
 reproduce the results presented in the [paper](https://arxiv.org/abs/1911.05478). 
 
 ## Documentation
