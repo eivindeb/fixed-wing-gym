@@ -37,6 +37,7 @@ class FixedWingAircraft(gym.Env):
         if sim_config_kw is None:
             sim_config_kw = {}
         sim_config_kw.update({"actuation": {"inputs": [a_s["name"] for a_s in self.cfg["action"]["states"]]}})
+        sim_config_kw["turbulence_sim_length"] = self.cfg["steps_max"]
         pyfly_kw = {"config_kw": sim_config_kw}
         if sim_config_path is not None:
             pyfly_kw["config_path"] = sim_config_path
