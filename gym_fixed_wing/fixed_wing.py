@@ -283,7 +283,7 @@ class FixedWingAircraft(gym.Env):
 
         self.use_curriculum = True
 
-    def reset(self, state=None, target=None):
+    def reset(self, state=None, target=None, **sim_reset_kw):
         """
         Reset state of environment.
 
@@ -304,7 +304,7 @@ class FixedWingAircraft(gym.Env):
             state = {}
             for init_state in ["roll", "pitch", "velocity_u"]:
                 state[init_state] = self.sampler.draw_sample(init_state)
-        self.simulator.reset(state)
+        self.simulator.reset(state, **sim_reset_kw)
         self.sample_simulator_parameters()
         self.sample_target()
         if target is not None:
