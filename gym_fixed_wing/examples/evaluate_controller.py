@@ -29,6 +29,18 @@ def make_env(config_path, rank, seed=0, info_kw=(), config_kw=None, sim_config_k
     return _init
 
 
+def print_results(results):
+    for metric, metric_v in results.items():
+        if isinstance(results[metric], dict):
+            print(metric)
+            for state, v in results[metric].items():
+                if metric != "success":
+                    v = np.nanmean([val if results["success"]["all"][i] else np.nan for i, val in enumerate(v)])
+                    print("\t{}:\t{}".format(state, v))
+                else:
+                    print("\t{}:\t{}".format(state, np.nanmean(v)))
+
+
 def evaluate_model_on_set(set_path, model, config_path=None, config_kw=None,
                           metrics=("success", "control_variation", "rise_time", "overshoot", "settling_time"),
                           norm_data_path=None, num_envs=1, turbulence_intensity="none", use_pid=False, writer=None,
@@ -152,15 +164,7 @@ def evaluate_model_on_set(set_path, model, config_path=None, config_kw=None,
                         tf.Summary.Value(tag="test_set/{}_{}".format(metric, state), simple_value=np.nanmean(v)))
         writer.add_summary(tf.Summary(value=summaries), timestep)
     else:
-        for metric, metric_v in res.items():
-            if isinstance(res[metric], dict):
-                print(metric)
-                for state, v in res[metric].items():
-                    if metric != "success":
-                        v = np.nanmean([val if res["success"]["all"][i] else np.nan for i, val in enumerate(v)])
-                        print("\t{}:\t{}".format(state, v))
-                    else:
-                        print("\t{}:\t{}".format(state, np.nanmean(v)))
+        print_results(res)
 
         return res
 
@@ -168,15 +172,19 @@ def evaluate_model_on_set(set_path, model, config_path=None, config_kw=None,
 if __name__ == '__main__':
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("test_set_path", help="Path to configuration for gym environment")
-    parser.add_argument("num_envs", help="Number of processes for environments.")
+    parser.add_argument("path_to_file", help="Path to test set to evaluate, or if --print-results flag is set, the path to the results file.")
+    parser.add_argument("--num-envs", required=False, help="Number of processes for environments.")
     parser.add_argument("--model-path", required=False, help="Path to RL controller model file.")
     parser.add_argument("--env-config-path", required=False, help="Path to environment configuration file for PID controller.")
     parser.add_argument("--PID", dest="use_pid", action="store_true", required=False, help="Use PID controller")
     parser.add_argument("--turbulence-intensity", required=False, help="Intensity of turbulence, one of [none, light, moderate, severe]")
+    parser.add_argument("--print-results", required=False, action="store_true", help="Print results from file at path_to_file")
 
     args = parser.parse_args()
-    num_cpu = int(args.num_envs)
+    if args.num_envs is not None:
+        num_cpu = int(args.num_envs)
+    else:
+        num_cpu = 1
 
     turbulence_intensity = args.turbulence_intensity
     if turbulence_intensity is None:
@@ -196,11 +204,14 @@ if __name__ == '__main__':
         config_path = os.path.join(os.path.dirname(model_path), "fixed_wing_config.json")
         norm_data_path = os.path.dirname(model_path)
 
-    np.save("eval_res.npy", evaluate_model_on_set(args.test_set_path,
-                                                  model,
-                                                  config_path=config_path,
-                                                  num_envs=num_cpu,
-                                                  use_pid=use_pid,
-                                                  norm_data_path=norm_data_path,
-                                                  turbulence_intensity=turbulence_intensity,
-                                                 ))
+    if args.print_results:
+        print_results(np.load(args.path_to_file, allow_pickle=True).item())
+    else:
+        np.save("eval_res.npy", evaluate_model_on_set(args.path_to_file,
+                                                      model,
+                                                      config_path=config_path,
+                                                      num_envs=num_cpu,
+                                                      use_pid=use_pid,
+                                                      norm_data_path=norm_data_path,
+                                                      turbulence_intensity=turbulence_intensity,
+                                                     ))
