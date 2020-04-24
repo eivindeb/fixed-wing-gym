@@ -179,7 +179,7 @@ if __name__ == '__main__':
     parser.add_argument("--policy", required=False, help="Type of policy to use (MLP or CNN)")
     parser.add_argument("--disable-curriculum", dest="disable_curriculum", action="store_true", required=False,
                         help="If this flag is set, curriculum (i.e. gradual increase in sampling region of initial and target conditions based on proficiency) is disabled.")
-    parser.add_argument("--test-set-path", required=False, help="Path to test set.")
+    parser.add_argument("--test-set-path", required=False, help="Path to test set. If supplied, the model is evaluated on this test set 4 times during training.")
 
     args = parser.parse_args()
     num_cpu = int(args.num_envs)
