@@ -181,6 +181,11 @@ if __name__ == '__main__':
     parser.add_argument("--print-results", required=False, action="store_true", help="Print results from file at path_to_file")
 
     args = parser.parse_args()
+
+    if args.print_results:
+        print_results(np.load(args.path_to_file, allow_pickle=True).item())
+        exit(0)
+
     if args.num_envs is not None:
         num_cpu = int(args.num_envs)
     else:
@@ -204,14 +209,11 @@ if __name__ == '__main__':
         config_path = os.path.join(os.path.dirname(model_path), "fixed_wing_config.json")
         norm_data_path = os.path.dirname(model_path)
 
-    if args.print_results:
-        print_results(np.load(args.path_to_file, allow_pickle=True).item())
-    else:
-        np.save("eval_res.npy", evaluate_model_on_set(args.path_to_file,
-                                                      model,
-                                                      config_path=config_path,
-                                                      num_envs=num_cpu,
-                                                      use_pid=use_pid,
-                                                      norm_data_path=norm_data_path,
-                                                      turbulence_intensity=turbulence_intensity,
-                                                     ))
+    np.save("eval_res.npy", evaluate_model_on_set(args.path_to_file,
+                                                  model,
+                                                  config_path=config_path,
+                                                  num_envs=num_cpu,
+                                                  use_pid=use_pid,
+                                                  norm_data_path=norm_data_path,
+                                                  turbulence_intensity=turbulence_intensity,
+                                                 ))
