@@ -21,7 +21,7 @@ python evaluate_controller.py test_sets/test_set_wind_none_step20-20-3.npy 4 --m
 Which will evaluate the PID controller and MLP controller, respectively, on the test set with no wind or turbulence. The model folder contains
 the RL controller used in the paper, as well as an MLP RL controller usable with the default version of stable-baselines.
 
-The included RL controllers and the PID controller were evaluated on these sets with PyFly v0.1.2 (commit #69b78cf7969ccbca42c0030d1acde649787e3108), 
+The included RL controllers and the PID controller were evaluated on these sets with PyFly v0.1.2 (commit #21f5b5c812330e1d5356d4b6b5fc774753839892), 
 producing the results shown in the table below. To reproduce the results shown here, make sure to use this PyFly version.
 
 |                     	|            	|       	| Success 	|     	|     	|       	| Rise time 	|       	|       	| Settling time 	|       	|       	| Overshoot 	|     	| Control variation 	|
@@ -40,7 +40,11 @@ producing the results shown in the table below. To reproduce the results shown h
 |                     	| RL (MLP)   	|    93 	|      92 	|  91 	|  91 	| 0.740 	|     1.002 	| 0.538 	| 3.477 	|         4.028 	| 4.975 	|   108 	|        92 	| 215 	|             1.698 	|
 |                     	| PID        	|    98 	|      98 	|  94 	|  83 	| 0.683 	|     0.557 	| 0.642 	| 2.463 	|         2.560 	| 4.280 	|    64 	|        51 	| 126 	|             0.826 	|
 
-The outputs of the evaluation scripts can be found in the evaluations folder.
+The outputs of the evaluation scripts can be found in the evaluations folder. They are in numpy format, containing the result dictionary, to
+process them in python, do:
+```python
+res = np.load("eval_res.npy", allow_pickle=True).item()
+```
 Due to refactoring of the code base, non-determinism that has since been eliminated and various other changes in the gym environment,
  these are not the exact values reported in the paper, however, they support the same trends highlighted in the paper.
 
@@ -62,4 +66,4 @@ This script trains a PPO agent to do attitude control of a fixed-wing aircraft. 
 tensorboard --logdir models/ppo_example/tb
 ```
 
-![alt text](tensorboard.png "Tensorboard logging data")
+![tensorboard log](tensorboard.png "Tensorboard logging data")
