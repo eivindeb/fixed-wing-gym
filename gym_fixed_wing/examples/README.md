@@ -47,7 +47,7 @@ process them in python do:
 res = np.load("eval_res.npy", allow_pickle=True).item()
 ```
 Evaluation results can also be outputted by supplying the evaluation results file path in place of the test set path along with the --print-results flag:
-```python
+```shell
 python evaluate_controller.py evaluations/eval_res_RL_CNN_severe.npy --print-results
 ```
 Due to refactoring of the code base, non-determinism that has since been eliminated and various other changes in the gym environment,
