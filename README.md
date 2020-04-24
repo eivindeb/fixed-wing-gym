@@ -1,13 +1,15 @@
 # gym-fixed-wing
 
 The Fixed-Wing aircraft environment is an [OpenAI Gym](https://github.com/openai/gym) wrapper for the 
-[PyFly](https://github.com/eivindeb/pyfly) flight simulator, adding several features on top of the base simulator,
-such as target states. This environment allows training and learning of reinforcement learning controllers for 
-fixed-wing aircraft.
+[PyFly](https://github.com/eivindeb/pyfly) flight simulator, adding several features on top of the base simulator
+such as target states and computation of performance metrics. This environment allows for training of reinforcement learning controllers
+for attitude control of fixed-wing aircraft.
 
 ## Installation
 
 ```shell
+git clone https://github.com/eivindeb/fixed-wing-gym
+cd fixed-wing-gym
 pip install -e .
 ```
 
@@ -121,10 +123,13 @@ list defines which types of terms should be included and their weight.
 
 ### Simulator
 Arguments defined in the simulator block overwrites the equivalent argument in the PyFly simulator. Values specified here
-can be included in the curriculum level functionality.
+are included in the curriculum level functionality, i.e. their sampling ranges are scaled according to some external measure such as the success rate of the controller.
 
-* **states** List. The states listed here are included in the curriculum, and have their arguments scaled according to
-curriculum_level * ([maximum or minimum] - midpoint).
+* **states** List. The states listed here are included in the curriculum, and have their arguments scaled according to:
+        
+        curriculum_level in [0, 1]                                                       # current environment difficulty level
+        midpoint = (sample_range_max + sample_range_min) / 2                             # assumed to be the easiest value
+        sample_range_xxx = midpoint + curriculum_level * (sample_range_xxx - midpoint).  # replace xxx with min or max
     * **name** String. Name of state. See PyFly documentation for other state arguments (init, constraint etc.)
 
 ### Render
