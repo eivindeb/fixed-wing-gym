@@ -21,7 +21,7 @@ setup(
         "numpy>=1.16.4",
         "pyglet>=1.3.2",
         "pyparsing>=2.4.0",
-        "python-dateutil=2.8.0",
+        "python-dateutil>=2.8.0",
         "scipy>=1.3.0",
         "six>=1.12.0",
         "pyfly-fixed-wing==0.1.2"
