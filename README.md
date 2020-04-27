@@ -158,6 +158,20 @@ The available metrics are:
 * **success_time_frac** The fraction of simulation steps for which the error in the target states is lower than the target bounds.
 * **total_error** The error of current to reference value in the target states summed over the simulation steps.
 
+## Citation
+If you use this software in your work, please consider citing:
+
+```text
+@inproceedings{bohn2019deep,
+  title={Deep Reinforcement Learning Attitude Control of Fixed-Wing UAVs Using Proximal Policy optimization},
+  author={B{\o}hn, Eivind and Coates, Erlend M and Moe, Signe and Johansen, Tor Arne},
+  booktitle={2019 International Conference on Unmanned Aircraft Systems (ICUAS)},
+  pages={523--533},
+  year={2019},
+  organization={IEEE}
+}
+```
+
 
 
  

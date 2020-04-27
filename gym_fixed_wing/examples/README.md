@@ -1,11 +1,17 @@
 ### Installation
-
-To use these scripts, install the stable-baselines library as described in the [documentation](https://stable-baselines.readthedocs.io/en/master/guide/install.html) or if you want to use the CNN-MLP policy described in the paper you need to install my [fork](https://github.com/eivindeb/stable-baselines):
+In addition to the dependencies of the gym environment itself, running these example scripts require Python 3.5-7, stable-baselines and tensorflow 1.
+These additional requirements can be installed by running the commands below. To use the CNN-MLP policy described in the paper requires my [fork](https://github.com/eivindeb/stable-baselines) of the stable-baselines repository, which is specified
+in the requirements_cnn.txt file. Please note that the included MLP controller from the models folder is incompatible with this fork.
+For any installation errors from stable-baselines, please refer to the [documentation](https://stable-baselines.readthedocs.io/en/master/guide/install.html).
 
 ```shell
-git clone https://github.com/eivindeb/stable-baselines
-cd stable-baselines
-pip install -e .
+pip install -r requirements.txt
+```
+
+OR
+
+```shell
+pip install -r requirements_cnn.txt
 ```
 
 ### Evaluating controllers
@@ -19,8 +25,7 @@ python evaluate_controller.py test_sets/test_set_wind_moderate_step20-20-3.npy -
 ```
 
 Which will evaluate the PID controller on the test set with no wind or turbulence and the MLP controller on the moderate turbulence set,
- respectively, on the test set with no wind or turbulence. The model folder contains
-the CNN RL controller used in the paper, as well as an MLP RL controller usable with the default version of stable-baselines.
+ respectively. The model folder contains the CNN RL controller used in the paper, as well as an MLP RL controller usable with the default version of stable-baselines.
 
 The included RL controllers and the PID controller were evaluated on these sets with PyFly v0.1.2 (commit #21f5b5c812330e1d5356d4b6b5fc774753839892), 
 producing the results shown in the table below. To reproduce the results shown here, make sure to use this PyFly version.
@@ -54,7 +59,7 @@ Due to refactoring of the code base, non-determinism that has since been elimina
  these are not the exact values reported in the paper, however, they support the same trends highlighted in the paper.
 
 Note that the RL MLP controller does not represent any best efforts to produce an optimal controller, but rather the controller
-obtained by running example training script below once.
+obtained by running the example training script below once.
 
 ### Training controllers
 
@@ -72,3 +77,17 @@ tensorboard --logdir models/ppo_example/tb
 ```
 
 ![tensorboard log](tensorboard.png "Tensorboard logging data")
+
+## Citation
+If you use this software in your work, please consider citing:
+
+```text
+@inproceedings{bohn2019deep,
+  title={Deep Reinforcement Learning Attitude Control of Fixed-Wing UAVs Using Proximal Policy optimization},
+  author={B{\o}hn, Eivind and Coates, Erlend M and Moe, Signe and Johansen, Tor Arne},
+  booktitle={2019 International Conference on Unmanned Aircraft Systems (ICUAS)},
+  pages={523--533},
+  year={2019},
+  organization={IEEE}
+}
+```
