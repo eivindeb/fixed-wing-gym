@@ -153,7 +153,7 @@
         "high": 60,
         "delta": 180,
         "class": "constant",
-        "bound": 3
+        "bound": 5
       },
       {
         "name": "pitch",
@@ -162,7 +162,7 @@
         "high": 25,
         "delta": 45,
         "class": "constant",
-        "bound": 3
+        "bound": 5
       },
       {
         "name": "Va",
@@ -300,5 +300,36 @@
     "plot_reward": true,
     "plot_target": true,
     "plot_goal": true
-  }
+  },
+  "metrics": [
+    {
+      "name": "rise_time",
+      "high": 0.9,
+      "low": 0.1
+    },
+    {
+      "name": "settling_time"
+    },
+    {
+      "name": "overshoot"
+    },
+    {
+      "name": "total_error"
+    },
+    {
+      "name": "avg_error"
+    },
+    {
+      "name": "control_variation"
+    },
+    {
+      "name": "success"
+    },
+    {
+      "name": "success_time_frac"
+    },
+    {
+      "name": "end_error"
+    }
+  ]
 }

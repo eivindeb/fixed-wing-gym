@@ -40,6 +40,7 @@ class FixedWingAircraft(gym.Env):
         if sim_config_kw is None:
             sim_config_kw = {}
         sim_config_kw.update({"actuation": {"inputs": [a_s["name"] for a_s in self.cfg["action"]["states"]]}})
+        sim_config_kw["turbulence_sim_length"] = self.cfg["steps_max"]
         pyfly_kw = {"config_kw": sim_config_kw}
         if sim_config_path is not None:
             pyfly_kw["config_path"] = sim_config_path
@@ -200,7 +201,7 @@ class FixedWingAircraft(gym.Env):
         self._rew_factors_init = copy.deepcopy(self.cfg["reward"]["factors"])
         self._sim_model = copy.deepcopy(self.cfg["simulator"].get("model", {}))
 
-        self.training = False
+        self.training = True
         self.render_on_reset = False
         self.render_on_reset_kw = {}
         self.save_on_reset = False
@@ -231,7 +232,7 @@ class FixedWingAircraft(gym.Env):
         Set the curriculum level of the environment, e.g. for starting with simple tasks and progressing to more difficult
         scenarios as the agent becomes increasingly proficient.
 
-        :param level: (int) the curriculum level
+        :param level: (int) the curriculum level between 0 and 1.
         """
         assert 0 <= level <= 1
         self._curriculum_level = level
@@ -293,7 +294,7 @@ class FixedWingAircraft(gym.Env):
 
         self.use_curriculum = True
 
-    def reset(self, state=None, target=None, params=None):
+    def reset(self, state=None, target=None, params=None, **sim_reset_kw):
         """
         Reset state of environment.
 
@@ -318,7 +319,7 @@ class FixedWingAircraft(gym.Env):
                 state[init_state] = self.sampler.draw_sample(init_state)
 
         self.step_size_lambda = None
-        self.simulator.reset(state)
+        self.simulator.reset(state, **sim_reset_kw)
 
         self.sample_simulator_parameters()
         if params is not None:
@@ -438,7 +439,7 @@ class FixedWingAircraft(gym.Env):
             obs = self.get_observation()
 
         if done:
-            for metric in self.cfg["metrics"]:
+            for metric in self.cfg.get("metrics", []):
                 info[metric["name"]] = self.get_metric(metric["name"], **metric)
 
             if self.sampler is not None:
@@ -452,6 +453,8 @@ class FixedWingAircraft(gym.Env):
                         self.sampler.add_data_point(state, self.simulator.state["Va"].history[0], info["success"]["Va"])
                     else:
                         self.sampler.add_data_point(state, self.simulator.state[state].history[0], info["success"][state])
+
+        info["target"] = self.target
 
         return obs, reward, done, info
 
@@ -505,7 +508,7 @@ class FixedWingAircraft(gym.Env):
             if delta is not None:
                 var_val = self.simulator.state[target_var_name].value
                 low = max(low, var_val - delta)
-                high = min(high, var_val + delta)
+                high = max(min(high, var_val + delta), low)
 
             if self.sampler is None:
                 initial_value = self.np_random.uniform(low, high)
@@ -1105,10 +1108,11 @@ class FixedWingAircraft(gym.Env):
             res["all"] = np.sum(np.abs(delta_controls)) / (
                         3 * self.simulator.dt * delta_controls.shape[1])
 
-        if metric in ["success", "settle_time"]:
+
+        if metric in ["success", "settling_time"]:
             for state, goal_status in self.history["goal"].items():
                 streak = deque(maxlen=self.cfg["target"]["success_streak_req"])
-                settle_time = np.nan
+                settling_time = np.nan
                 success = False
                 for i, step_goal in enumerate(goal_status):
                     streak.append(step_goal)
@@ -1289,4 +1293,5 @@ if __name__ == "__main__":
         action = pid.get_action(phi, theta, Va, omega)
         obs, rew, done, info = env.step(action)
     env.render(block=True)
+    print("yeah")
 

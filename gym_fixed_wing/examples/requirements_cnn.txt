@@ -1,0 +1,2 @@
+-e git://github.com/eivindeb/stable-baselines.git#egg=stable-baselines
+tensorflow<=1.15
