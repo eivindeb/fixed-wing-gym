@@ -1164,6 +1164,18 @@ class FixedWingAircraft(gym.Env):
 
         return res
 
+    def generate_test_set(self, case_count, save_path, param=False):
+        test_set = []
+        for i in range(case_count):
+            self.reset()
+            scenario = self.get_initial_state()
+            if param:
+                params = self.get_simulator_parameters(normalize=False)
+                scenario["param"] = {k["name"]: params[i] for i, k in enumerate(self.cfg["simulator"]["model"]["parameters"])}
+            test_set.append(scenario)
+        test_set = np.array(test_set)
+        np.save(save_path, test_set)
+
 
 class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
     def __init__(self, config_path, sampler=None, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
