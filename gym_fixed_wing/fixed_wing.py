@@ -1125,10 +1125,10 @@ class FixedWingAircraft(gym.Env):
                     streak.append(step_goal)
                     if len(streak) == self.cfg["target"]["success_streak_req"] and np.mean(streak) >= \
                             self.cfg["target"]["success_streak_fraction"]:
-                        settle_time = i
+                        settling_time = i
                         success = True
                         break
-                res[state] = success if metric == "success" else settle_time
+                res[state] = success if metric == "success" else settling_time
 
         if metric == "rise_time":
             rise_low, rise_high = metric_kw.get("low", 0.1), metric_kw.get("high", 0.9)
