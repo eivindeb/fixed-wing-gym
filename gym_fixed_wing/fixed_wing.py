@@ -438,6 +438,13 @@ class FixedWingAircraft(gym.Env):
             else:
                 reward = reward_fail
             info["termination"] = step_info["termination"]
+            for k, v in self._get_next_target().items():
+                self.target[k] = v
+                self.history["target"][k].append(v)
+                self.history["error"][k].append(self._get_error(k))
+
+            for state, status in self._get_goal_status().items():
+                self.history["goal"][state].append(status)
             obs = self.get_observation()
 
         if done:
@@ -822,12 +829,7 @@ class FixedWingAircraft(gym.Env):
                     init_noise = self.np_random.normal(loc=0, scale=0.5) * self.simulator.dt
             for obs_var in self.cfg["observation"]["states"]:
                 if obs_var["type"] == "state":
-                    try:
-                        val = self.simulator.state[obs_var["name"]].history[-i]
-                    except IndexError:
-                        with open("observation_error_{}.txt".format("{}".format(datetime.datetime.now()).replace(".", "_")), "w") as error_file:
-                            error_file.writelines(["Steps count {}".format(self.steps_count), "History {}".format(self.simulator.state[obs_var["name"]].history), "i {}".format(i)])
-                        val = self.simulator.state[obs_var["name"]].history[0]
+                    val = self.simulator.state[obs_var["name"]].history[-i]
                 elif obs_var["type"] == "target":
                     if obs_var["value"] == "relative":
                         val = self._get_error(obs_var["name"]) if i == 1 else self.history["error"][obs_var["name"]][-i]
