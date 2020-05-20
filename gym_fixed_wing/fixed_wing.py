@@ -1375,6 +1375,7 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
 
 
 if __name__ == "__main__":
+    from observation_noise import OrnsteinUhlenbeckNoise
     from pyfly.pid_controller import PIDController
 
     env = FixedWingAircraft("fixed_wing_config_dev.json", config_kw={"steps_max": 1000,
@@ -1398,4 +1399,6 @@ if __name__ == "__main__":
         obs, rew, done, info = env.step(action)
     env.render(block=True)
     print("yeah")
+else:
+    from .observation_noise import OrnsteinUhlenbeckNoise
 
