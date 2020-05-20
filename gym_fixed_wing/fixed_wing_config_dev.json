@@ -309,6 +309,7 @@
       "var_type": "relative",
       "var": 0.2,
       "clip": 0.4,
+      "use_sampler": true,
       "parameters": [
         {"name": "C_D_0"},
         {"name": "C_D_alpha1"},
@@ -362,12 +363,13 @@
         {"name": "k_Omega"},
         {"name": "k_T_P"},
         {"name": "k_motor"},
-        {"name": "mass"}
+        {"name": "mass",
+        "use_sampler": false}
       ]
     },
     "dt": {
       "type": "exponential",
-      "base": 0.04,
+      "base": 0.01,
       "low": 125,
       "high": 1000
     }

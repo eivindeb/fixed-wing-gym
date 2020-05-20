@@ -271,9 +271,19 @@ class FixedWingAircraft(gym.Env):
                             val = np.radians(val)
                     setattr(self.simulator.state[state_name], prop, val)
 
-        if "model" in self.cfg["simulator"]:
+        if self._sim_model:
             self._sim_model["var"] = self.cfg["simulator"]["model"]["var"] * level
             self._sim_model["clip"] = self.cfg["simulator"]["model"]["clip"] * level
+
+            if self.sampler is not None:
+                for param in self._sim_model.get("parameters", []):
+                    if param.get("use_sampler", self._sim_model.get("use_sampler", False)):
+                        var, clip = param.get("var", self._sim_model["var"]), param.get("clip", self._sim_model["clip"])
+                        original = self.simulator.params[param["name"]]
+                        param_range = np.abs(original * clip)
+                        self.sampler.add_variable(param["name"], (original - param_range, original + param_range),
+                                                  distribution_type="normal", loc=original, scale=np.abs(var * original))
+                        # TODO: add support for other distributions
 
         self._target_props_init = {"states": {}}
         for attr, val in self.cfg["target"].items():
@@ -301,7 +311,7 @@ class FixedWingAircraft(gym.Env):
                 else:
                     self._target_props_init[attr] = val
 
-        if self.sampler is not None:
+        if self.sampler is not None and False: # TODO: fix all these
             for state, attrs in self._target_props_init["states"].items():
                 if attrs.get("convert_to_radians", False):
                     low, high = np.radians(attrs["low"]), np.radians(attrs["high"])
@@ -309,7 +319,7 @@ class FixedWingAircraft(gym.Env):
                     low, high = attrs["low"], attrs["high"]
                 self.sampler.add_state("{}_target".format(state), state_range=(low, high))
 
-            for state_name in ["roll", "pitch", "velocity_u"]:
+            for state_name in ["roll", "pitch", "Va"]:
                 state = self.simulator.state[state_name]
                 self.sampler.add_state(state_name, (state.init_min, state.init_max))
 
@@ -334,9 +344,9 @@ class FixedWingAircraft(gym.Env):
 
         self.steps_count = 0
 
-        if state is None and self.sampler is not None:
+        if state is None and self.sampler is not None and False:
             state = {}
-            for init_state in ["roll", "pitch", "velocity_u"]:
+            for init_state in ["roll", "pitch", "Va"]:
                 state[init_state] = self.sampler.draw_sample(init_state)
 
         self.step_size_lambda = None
@@ -475,15 +485,16 @@ class FixedWingAircraft(gym.Env):
                 info[metric["name"]] = self.get_metric(metric["name"], **metric)
 
             if self.sampler is not None:
-                for state in self.history["target"]:
-                    self.sampler.add_data_point("{}_target".format(state),
-                                                self.history["target"][state][0],
-                                                info["success"][state])
+                for param in self._sim_model.get("parameters", []):
+                    if self.sampler.variable_in_sampler(param["name"]):
+                        self.sampler.add_data_point(param["name"], self.simulator.params[param["name"]], info["success"]["all"])
+                if False:
+                    for state in self.history["target"]:
+                        self.sampler.add_data_point("{}_target".format(state),
+                                                    self.history["target"][state][0],
+                                                    info["success"][state])
 
-                for state in ["roll", "pitch", "velocity_u"]:
-                    if state == "velocity_u":
-                        self.sampler.add_data_point(state, self.simulator.state["Va"].history[0], info["success"]["Va"])
-                    else:
+                    for state in ["roll", "pitch", "Va"]:
                         self.sampler.add_data_point(state, self.simulator.state[state].history[0], info["success"][state])
 
         info["target"] = self.target
@@ -542,7 +553,7 @@ class FixedWingAircraft(gym.Env):
                 low = max(low, var_val - delta)
                 high = max(min(high, var_val + delta), low)
 
-            if self.sampler is None:
+            if self.sampler is None or True:
                 initial_value = self.np_random.uniform(low, high)
             else:
                 initial_value = self.sampler.draw_sample("{}_target".format(target_var_name), (low, high))
@@ -584,25 +595,28 @@ class FixedWingAircraft(gym.Env):
         param_value_var = self._sim_model.get("var", 0.1)
         param_value_clip = self._sim_model.get("clip", None)
         var_type = self._sim_model.get("var_type", "relative")
-        for param_arguments in self._sim_model["parameters"]:
-            orig_param_value = param_arguments.get("original", None)
-            var = param_arguments.get("var", param_value_var)
-            if orig_param_value is None:
-                orig_param_value = self.simulator.params[param_arguments["name"]]
-                param_arguments["original"] = orig_param_value
-            if orig_param_value != 0 and var_type == "relative":
-                var *= np.abs(orig_param_value)
-            if dist_type == "gaussian":
-                param_value = self.np_random.normal(loc=orig_param_value, scale=var)
-                clip = param_arguments.get("clip", param_value_clip)
-                if clip is not None:
-                    if orig_param_value != 0 and var_type == "relative":
-                        clip *= np.abs(orig_param_value)
-                    param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
-            elif dist_type == "uniform":
-                param_value = self.np_random.uniform(low=orig_param_value - var, high=orig_param_value + var)
+        for param_arguments in self._sim_model.get("parameters", []):
+            if self.sampler is not None and self.sampler.variable_in_sampler(param_arguments["name"]):
+                param_value = self.sampler.draw_sample(param_arguments["name"])
             else:
-                raise ValueError("Unexpected distribution type {}".format(dist_type))
+                orig_param_value = param_arguments.get("original", None)
+                var = param_arguments.get("var", param_value_var)
+                if orig_param_value is None:
+                    orig_param_value = self.simulator.params[param_arguments["name"]]
+                    param_arguments["original"] = orig_param_value
+                if orig_param_value != 0 and var_type == "relative":
+                    var *= np.abs(orig_param_value)
+                if dist_type == "gaussian":
+                    param_value = self.np_random.normal(loc=orig_param_value, scale=var)
+                    clip = param_arguments.get("clip", param_value_clip)
+                    if clip is not None:
+                        if orig_param_value != 0 and var_type == "relative":
+                            clip *= np.abs(orig_param_value)
+                        param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
+                elif dist_type == "uniform":
+                    param_value = self.np_random.uniform(low=orig_param_value - var, high=orig_param_value + var)
+                else:
+                    raise ValueError("Unexpected distribution type {}".format(dist_type))
 
             self.simulator.params[param_arguments["name"]] = param_value
 
