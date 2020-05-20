@@ -26,7 +26,9 @@ class FixedWingAircraft(gym.Env):
         def set_config_attrs(parent, kws):
             for attr, val in kws.items():
                 try:
-                    if isinstance(val, dict) or isinstance(parent[attr], list):
+                    if isinstance(val, list):
+                        parent[attr] = val
+                    elif isinstance(val, dict) or isinstance(parent[attr], list):
                         set_config_attrs(parent[attr], val)
                     else:
                         parent[attr] = val
