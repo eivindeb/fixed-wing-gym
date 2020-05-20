@@ -1342,8 +1342,9 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         return np.array(low), np.array(high)
 
     def compute_reward(self, achieved_goal, desired_goal, info):
-        original_values = {"achieved": {}, "desired": {}, "action_history": copy.deepcopy(self.history["action"]),
-                           "steps_count": self.steps_count}
+        original_values = {"achieved": {}, "desired": {}, "steps_count": self.steps_count}
+        if self.history is not None:
+            original_values["action_history"] = copy.deepcopy(self.history["action"])
 
         if self.obs_norm:
             achieved_goal = achieved_goal * self.goal_vars + self.goal_means
@@ -1382,7 +1383,8 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
             self.simulator.state[goal_state].value = original_values["achieved"][goal_state]
             self.target[goal_state] = original_values["desired"][goal_state]
 
-        self.history["action"] = original_values["action_history"]
+        if self.history is not None:
+            self.history["action"] = original_values["action_history"]
         self.steps_count = original_values["steps_count"]
         if potential:
             self.prev_shaping = original_values["prev_shaping"]
