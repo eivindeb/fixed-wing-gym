@@ -122,6 +122,23 @@ class FixedWingAircraft(gym.Env):
                 self.obs_module_indices["pi"].append(i)
                 self.obs_module_indices["vf"].append(i)
 
+        if self.cfg["observation"].get("noise", None) is not None:
+            sigma = self.cfg["observation"]["noise"]["sigma"] * np.array([var.get("noise_weight", 0) for var in self.cfg["observation"]["states"]])
+            mu = np.zeros_like(sigma)
+            self.obs_noise = OrnsteinUhlenbeckNoise(mean=mu, sigma=sigma, theta=self.cfg["observation"]["noise"]["theta"])
+            self.obs_noiseless_critic = not self.cfg["observation"]["noise"].get("critic", True)
+            if self.obs_noiseless_critic:
+                self.obs_noiseless_critic_idxs = sorted(set(np.nonzero(sigma)[0]).intersection(self.obs_module_indices["vf"]))
+                new_base = len(self.cfg["observation"]["states"])
+                for i, idx in enumerate(self.obs_noiseless_critic_idxs):
+                    obs_high.append(obs_high[idx])
+                    obs_low.append(obs_low[idx])
+                    self.obs_module_indices["vf"][self.obs_module_indices["vf"].index(idx)] = new_base + i
+                self.obs_module_indices["vf"].sort()
+        else:
+            self.obs_noise = None
+            self.obs_noiseless_critic = False
+
         self.obs_exclusive_states = True if self.obs_module_indices["pi"] != self.obs_module_indices["vf"] else False
 
         if self.cfg["observation"]["length"] > 1:
@@ -227,6 +244,8 @@ class FixedWingAircraft(gym.Env):
         """
         self.np_random, seed = gym.utils.seeding.np_random(seed)
         self.simulator.seed(seed)
+        if self.obs_noise is not None:
+            self.obs_noise.seed(seed)
         return [seed]
 
     def set_curriculum_level(self, level):  # TODO: implement parameters also?
@@ -334,6 +353,10 @@ class FixedWingAircraft(gym.Env):
                 if self._target_props[k]["class"] not in ["constant", "compensate"]:
                     self._target_props[k]["class"] = "constant"
                 self.target[k] = v
+
+        if self.obs_noise is not None:
+            self.obs_noise.reset()
+            self.obs_noise.dt = self.simulator.dt
 
         obs = self.get_observation()
         self.history = {"action": [], "reward": [], "observation": [obs],
@@ -819,7 +842,8 @@ class FixedWingAircraft(gym.Env):
             action_indexes = {state["name"]: action_states.index(state["name"]) for state in self.cfg["observation"]["states"] if state["type"] == "action"}
         step = self.cfg["observation"].get("step", 1)
         init_noise = None
-        noise = self.cfg["observation"].get("noise", None)
+        if self.obs_noise is not None:
+            obs_noise = self.obs_noise()
 
         for i in range(1, (self.cfg["observation"]["length"] + (1 if step == 1 else 0)) * step, step):
             obs_i = []
@@ -882,9 +906,13 @@ class FixedWingAircraft(gym.Env):
                 if self.obs_norm and obs_var.get("norm", True):
                     val -= obs_var["mean"]
                     val /= np.sqrt(obs_var["var"])
-                if noise is not None:
-                    val += self.np_random.normal(loc=noise["mean"], scale=noise["var"]) * obs_var.get("noise_weight", 1)
                 obs_i.append(val)
+            if self.obs_noise is not None:
+                if self.obs_noiseless_critic:
+                    obs_i.extend([obs_i[j] for j in self.obs_noiseless_critic_idxs])
+                    obs_i[:-len(self.obs_noiseless_critic_idxs)] += obs_noise
+                else:
+                    obs_i += obs_noise
             if self.cfg["observation"]["shape"] == "vector":
                 obs.extend(obs_i)
             elif self.cfg["observation"]["shape"] == "matrix":
@@ -1182,44 +1210,99 @@ class FixedWingAircraft(gym.Env):
 class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
     def __init__(self, config_path, sampler=None, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
         super(FixedWingAircraftGoal, self).__init__(config_path=config_path,
-                                                sampler=sampler,
-                                                sim_config_path=sim_config_path,
-                                                sim_parameter_path=sim_parameter_path,
-                                                config_kw=config_kw,
-                                                sim_config_kw=sim_config_kw
-                                                )
+                                                    sampler=sampler,
+                                                    sim_config_path=sim_config_path,
+                                                    sim_parameter_path=sim_parameter_path,
+                                                    config_kw=config_kw,
+                                                    sim_config_kw=sim_config_kw
+                                                    )
 
+        goal_states = self.cfg["observation"]["goals"]
         self.goal_states = [goal["name"] for goal in self.cfg["observation"]["goals"]]
-        if self.obs_norm:
-            self.goal_means = np.array([goal["mean"] for goal in self.cfg["observation"]["goals"]])
-            self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
+
+        self.obs_idxs = {"desired": [], "achieved": [], "obs": []}
+        self.obs_idxs["obs"] = list(range(len(self.cfg["observation"]["states"])))
+
+        num_non_goal_states = len(self.cfg["observation"]["states"])
+        if self.obs_noiseless_critic:
+            num_non_goal_states_noiseless = len(self.obs_noiseless_critic_idxs)
+            noiseless_start_idx = num_non_goal_states + 2 * len(goal_states)
+            num_goal_states_with_noise = sum([1 if state.get("noise_weight") > 0 else 0 for state in goal_states])
+            self.obs_idxs["obs"].extend(list(range(noiseless_start_idx, noiseless_start_idx + len(self.obs_noiseless_critic_idxs))))
+        else:
+            num_non_goal_states_noiseless = 0
 
         for goal_type in ["achieved", "desired"]:
             for state in self.cfg["observation"]["goals"]:
                 state = copy.deepcopy(state)
+                state_idx = len(self.cfg["observation"]["states"])
+                self.obs_idxs[goal_type].append(state_idx)
                 if goal_type == "desired":
                     state["type"] = "target"
                     state["value"] = "absolute"
+                    state["noise_weight"] = 0
+                    sigma = 0
+                    mean = 0
+                else:
+                    sigma = state.get("noise_weight", 0) * self.cfg["observation"]["noise"]["sigma"]
+                    mean = 0
+                    if self.obs_noiseless_critic and sigma > 0:
+                        self.obs_idxs[goal_type].append(noiseless_start_idx + len(self.obs_noiseless_critic_idxs))
+                        self.obs_noiseless_critic_idxs.append(state_idx)
+                if self.obs_noise is not None:
+                    self.obs_noise._sigma = np.append(self.obs_noise._sigma, sigma)
+                    self.obs_noise._mu = np.append(self.obs_noise._mu, mean)
                 self.cfg["observation"]["states"].append(state)
+
+        self.obs_idxs["achieved"].sort()
+
+        noise_goal_state_i = 0
+        for i, state in enumerate(self.cfg["observation"]["goals"]):
+            self.obs_module_indices["pi"].append(num_non_goal_states + num_non_goal_states_noiseless + i)
+            if self.obs_noiseless_critic and state["noise_weight"] > 0:
+                self.obs_module_indices["vf"].append(num_non_goal_states + num_non_goal_states_noiseless + len(goal_states) + noise_goal_state_i)
+                noise_goal_state_i += 1
+            else:
+                self.obs_module_indices["vf"].append(num_non_goal_states + num_non_goal_states_noiseless + i)
+
+        desired_module_indices = list(range(len(self.obs_idxs["obs"]) + len(self.obs_idxs["achieved"]),
+                                            len(self.obs_idxs["obs"]) + len(self.obs_idxs["achieved"]) + len(goal_states)))
+
+        self.obs_module_indices["pi"].extend(desired_module_indices)
+        self.obs_module_indices["vf"].extend(desired_module_indices)
+
+        if self.obs_norm:
+            self.goal_means = np.array([goal["mean"] for goal in self.cfg["observation"]["goals"]])
+            self.goal_vars = np.array([goal["var"] for goal in self.cfg["observation"]["goals"]])
 
         if len(self.observation_space.shape) == 1:
             goal_space_shape = (len(self.goal_states),)
         else:
             goal_space_shape = (self.observation_space.shape[0], len(self.goal_states))
-        self.observation_space = gym.spaces.Dict(dict(
-            desired_goal=gym.spaces.Box(-np.inf, np.inf, shape=goal_space_shape, dtype="float32"),
-            achieved_goal=gym.spaces.Box(-np.inf, np.inf, shape=goal_space_shape, dtype="float32"),
-            observation=self.observation_space
-        ))
 
-        for module in ["pi", "vf"]:
-            self.obs_module_indices[module].extend(list(
-                range(len(self.cfg["observation"]["states"]),
-                len(self.cfg["observation"]["states"]) + 2 * len(self.goal_states))))
+        if self.obs_noiseless_critic:
+            num_goal_states_with_noise = sum([1 if state.get("noise_weight") > 0 else 0 for state in goal_states])
+            if len(self.observation_space.shape) == 1:
+                obs_low = np.append(self.observation_space.low, [-np.inf] * num_goal_states_with_noise)
+                obs_high = np.append(self.observation_space.high, [np.inf] * num_goal_states_with_noise)
+            else:
+                obs_low = np.c_[self.observation_space.low, np.full((self.observation_space.shape[0], num_goal_states_with_noise), -np.inf)]
+                obs_high = np.c_[self.observation_space.high, np.full((self.observation_space.shape[0], num_goal_states_with_noise), np.inf)]
+        else:
+            obs_low = self.observation_space.low
+            obs_high = self.observation_space.high
+
+        self.observation_space = gym.spaces.Dict(dict(
+            achieved_goal=gym.spaces.Box(-np.inf, np.inf, shape=goal_space_shape, dtype="float32"),
+            desired_goal=gym.spaces.Box(-np.inf, np.inf, shape=goal_space_shape, dtype="float32"),
+            observation=gym.spaces.Box(obs_low, obs_high, dtype="float32")
+        ))
 
     def get_observation(self):
         obs = super(FixedWingAircraftGoal, self).get_observation()
-        obs, achieved_goal, desired_goal = np.split(obs, [-len(self.goal_states) * 2, -len(self.goal_states)], axis=-1)
+        achieved_goal = obs[..., self.obs_idxs["achieved"]]
+        desired_goal = obs[..., self.obs_idxs["desired"]]
+        obs = obs[..., self.obs_idxs["obs"]]
 
         obs = dict(
             desired_goal=desired_goal,
