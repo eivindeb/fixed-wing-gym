@@ -398,7 +398,7 @@ class FixedWingAircraft(gym.Env):
         :param action: ([float]) the action chosen by the agent
         :return: ([float], float, bool, dict) observation vector, reward, done, extra information about episode on done
         """
-        self.history["action"].append(action)
+        self.history["action"].append(np.copy(action))
 
         assert not np.any(np.isnan(action))
 
