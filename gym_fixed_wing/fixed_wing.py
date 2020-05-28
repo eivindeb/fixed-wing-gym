@@ -13,7 +13,7 @@ import datetime
 
 
 class FixedWingAircraft(gym.Env):
-    def __init__(self, config_path, sampler=None, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
+    def __init__(self, config_path, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None, sampler=None):
         """
         A gym environment for fixed-wing aircraft, interfacing the python flight simulator PyFly to the openAI
         environment.
@@ -1224,7 +1224,7 @@ class FixedWingAircraft(gym.Env):
 
 
 class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
-    def __init__(self, config_path, sampler=None, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None):
+    def __init__(self, config_path, sim_config_path=None, sim_parameter_path=None, config_kw=None, sim_config_kw=None, sampler=None):
         super(FixedWingAircraftGoal, self).__init__(config_path=config_path,
                                                     sampler=sampler,
                                                     sim_config_path=sim_config_path,
