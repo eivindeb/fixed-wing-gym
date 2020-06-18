@@ -73,25 +73,53 @@ class FixedWingAircraft(gym.Env):
 
             high = obs_var.get("high", None)
             if high is None:
-                state = self.simulator.state[obs_var["name"]]
-                if state.value_max is not None:
-                    high = state.value_max
-                elif state.constraint_max is not None:
-                    high = state.constraint_max
+                if obs_var["type"] in ["state", "action", "target"]:
+                    state = self.simulator.state[obs_var["name"]]
+                    if state.value_max is not None:
+                        high = state.value_max
+                    elif state.constraint_max is not None:
+                        high = state.constraint_max
+                    else:
+                        high = np.finfo(np.float32).max
+                elif obs_var["type"] == "reward":
+                    factor = self._get_rew_factor(obs_var["name"])
+                    if obs_var["value"] in factor.get("randomize", []):
+                        if factor[obs_var["value"]]["distribution"] == "uniform":
+                            high = factor[obs_var["value"]]["high"]
+                        elif factor[obs_var["value"]]["distribution"] == "normal":
+                            high = factor[obs_var["value"]]["clip_high"]
+                        else:
+                            raise ValueError
+                    else:
+                        high = factor[obs_var["value"]]
                 else:
-                    high = np.finfo(np.float32).max
+                    raise ValueError
             elif obs_var.get("convert_to_radians", False):
                 high = np.radians(high)
 
             low = obs_var.get("low", None)
             if low is None:
-                state = self.simulator.state[obs_var["name"]]
-                if state.value_min is not None:
-                    low = state.value_min
-                elif state.constraint_min is not None:
-                    low = state.constraint_min
+                if obs_var["type"] in ["state", "action", "target"]:
+                    state = self.simulator.state[obs_var["name"]]
+                    if state.value_min is not None:
+                        low = state.value_min
+                    elif state.constraint_min is not None:
+                        low = state.constraint_min
+                    else:
+                        low = -np.finfo(np.float32).max
+                elif obs_var["type"] == "reward":
+                    factor = self._get_rew_factor(obs_var["name"])
+                    if obs_var["value"] in factor.get("randomize", []):
+                        if factor[obs_var["value"]]["distribution"] == "uniform":
+                            low = factor[obs_var["value"]]["low"]
+                        elif factor[obs_var["value"]]["distribution"] == "normal":
+                            low = factor[obs_var["value"]]["clip_low"]  # TODO: maybe set to n * scale + mean
+                        else:
+                            raise ValueError
+                    else:
+                        low = factor[obs_var["value"]]
                 else:
-                    low = -np.finfo(np.float32).max
+                    raise ValueError
             elif obs_var.get("convert_to_radians", False):
                 low = np.radians(low)
 
@@ -327,7 +355,7 @@ class FixedWingAircraft(gym.Env):
 
         self.use_curriculum = True
 
-    def reset(self, state=None, target=None, param=None, **sim_reset_kw):
+    def reset(self, state=None, target=None, param=None, **sim_reset_kw):  # TODO: rew factor should be possible to set
         """
         Reset state of environment.
 
@@ -370,6 +398,21 @@ class FixedWingAircraft(gym.Env):
             self.obs_noise.reset()
             self.obs_noise.dt = self.simulator.dt
 
+        for rew_term in self.cfg["reward"]["terms"]:
+            self.prev_shaping[rew_term["function_class"]] = None
+
+        for i, rew_factor in enumerate(self._rew_factors_init):
+            for attribute in rew_factor.get("randomize", []):
+                if rew_factor[attribute]["distribution"] == "uniform":
+                    self.cfg["reward"]["factors"][i][attribute] = self.np_random.uniform(rew_factor[attribute]["low"],
+                                                                                         rew_factor[attribute]["high"])
+                elif rew_factor[attribute]["distribution"] == "normal":
+                    self.cfg["reward"]["factors"][i][attribute] = self.np_random.normal(rew_factor[attribute]["loc"],
+                                                                                         rew_factor[attribute]["scale"])
+                else:
+                    raise NotImplementedError
+
+
         obs = self.get_observation()
         self.history = {"action": [], "reward": [], "observation": [obs],
                         "target": {k: [v] for k, v in self.target.items()},
@@ -379,15 +422,6 @@ class FixedWingAircraft(gym.Env):
             self.history["goal"] = {}
             for state, status in self._get_goal_status().items():
                 self.history["goal"][state] = [status]
-
-        for rew_term in self.cfg["reward"]["terms"]:
-            self.prev_shaping[rew_term["function_class"]] = None
-
-        if self.cfg["reward"].get("randomize_scaling", False):
-            for i, rew_factor in enumerate(self._rew_factors_init):
-                if isinstance(rew_factor["scaling"], list):
-                    low, high = rew_factor["scaling"]
-                    self.cfg["reward"]["factors"][i]["scaling"] = self.np_random.uniform(low, high)
 
         return obs
 
@@ -776,9 +810,9 @@ class FixedWingAircraft(gym.Env):
                 elif component["type"] == "error":
                     val = self._get_error(component["name"])
                 elif component["type"] == "int_error":
-                    val = np.sum(self.history["error"][component["name"]][-self.integration_window:])
-                    if self.steps_count < self.integration_window:
-                        val += (self.integration_window - self.steps_count) * self.history["error"][component["name"]][0]
+                    val = np.sum(self.history["error"][component["name"]][-component["window_size"]:])
+                    if self.steps_count < component["window_size"]:
+                        val += (component["window_size"] - self.steps_count) * self.history["error"][component["name"]][0]
                 else:
                     raise ValueError("Unexpected reward type {} for class state".format(component["type"]))
             elif component["class"] == "success":
@@ -877,11 +911,12 @@ class FixedWingAircraft(gym.Env):
                         val = self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i]
                     elif obs_var["value"] == "integrator":
                         if self.history is None:
-                            val = self._get_error(obs_var["name"]) * self.integration_window
+                            val = self._get_error(obs_var["name"]) * obs_var["window_size"]
                         else:
-                            val = np.sum(self.history["error"][obs_var["name"]][-self.integration_window - i:-i])
-                            if self.steps_count - i < self.integration_window:
-                                val += (self.integration_window - (self.steps_count - i)) * self.history["error"][obs_var["name"]][0]
+                            window_high_idx = None if i == 1 else i - 1
+                            val = np.sum(self.history["error"][obs_var["name"]][-obs_var["window_size"] - (i - 1):window_high_idx])
+                            if self.steps_count - i < obs_var["window_size"]:
+                                val += (obs_var["window_size"] - (self.steps_count - i)) * self.history["error"][obs_var["name"]][0]
                     else:
                         raise ValueError("Unexpected observation variable target value type: {}".format(obs_var["value"]))
                 elif obs_var["type"] == "action":
@@ -915,6 +950,8 @@ class FixedWingAircraft(gym.Env):
                                 val = self.history["action"][-i][a_i]
                             else:
                                 val = self.simulator.state[obs_var["name"]].history["command"][-i]
+                elif obs_var["type"] == "reward":
+                    val = self._get_rew_factor(obs_var["name"])[obs_var["value"]]
                 else:
                     raise Exception("Unexpected observation variable type: {}".format(obs_var["type"]))
                 if init_noise is not None and not obs_var["type"] == "target":
@@ -1221,6 +1258,13 @@ class FixedWingAircraft(gym.Env):
             test_set.append(scenario)
         test_set = np.array(test_set)
         np.save(save_path, test_set)
+
+    def _get_rew_factor(self, name):
+        for rew_factor in self.cfg["reward"]["factors"]:
+            if rew_factor["name"] == name:
+                return rew_factor
+
+        raise ValueError("No reward factor with name {}".format(name))
 
 
 class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):

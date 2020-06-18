@@ -111,6 +111,27 @@
         "noise_weight": 1
       },
       {
+        "name": "roll",
+        "type": "target",
+        "value": "integrator",
+        "window_size": 100,
+        "noise_weight": 0
+      },
+      {
+        "name": "pitch",
+        "type": "target",
+        "value": "integrator",
+        "window_size": 100,
+        "noise_weight": 0
+      },
+      {
+        "name": "Va",
+        "type": "target",
+        "value": "integrator",
+        "window_size": 100,
+        "noise_weight": 0
+      },
+      {
         "name": "elevator",
         "value": "delta",
         "type": "action",
@@ -136,6 +157,13 @@
         "norm": false,
         "noise_weight": 0,
         "module": "vf"
+      },
+      {
+        "name": "action",
+        "type": "reward",
+        "value": "scaling",
+        "norm": false,
+        "noise_weight": 0
       }
     ]
   },
@@ -208,6 +236,7 @@
     ],
     "factors": [
       {
+        "name": "step",
         "class": "step",
         "function_class": "linear",
         "scaling": 1,
@@ -216,6 +245,7 @@
         "sign": -1
       },
       {
+        "name": "goal",
         "class": "goal",
         "type": "all",
         "function_class": "linear",
@@ -229,9 +259,14 @@
         "class": "action",
         "type": "delta",
         "function_class": "linear",
-        "window_size": 1,
-        "scaling": 30,
+        "window_size": 6,
+        "scaling": {
+          "distribution": "uniform",
+          "low": 5,
+          "high": 60
+        },
         "shaping": false,
+        "randomize": ["scaling"],
         "sign": -1
       }
     ]
