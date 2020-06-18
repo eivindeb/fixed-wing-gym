@@ -57,11 +57,10 @@ class FixedWingAircraft(gym.Env):
         self._steps_for_current_target = None
         self.goal_achieved = False
 
-        self.integration_window = self.cfg.get("integration_window", 0)
-
         self.viewer = None
 
         self.np_random = np.random.RandomState()
+
         self.obs_norm_mean_mask = []
         self.obs_norm = self.cfg["observation"].get("normalize", False)
         self.obs_module_indices = {"pi": [], "vf": []}
@@ -379,13 +378,13 @@ class FixedWingAircraft(gym.Env):
             for init_state in ["roll", "pitch", "Va"]:
                 state[init_state] = self.sampler.draw_sample(init_state)
 
-        self.step_size_lambda = None
-        self.simulator.reset(state, **sim_reset_kw)
-
         self.sample_simulator_parameters()
         if param is not None:
             for k, v in param.items():
                 self.simulator.params[k] = v
+
+        self.step_size_lambda = None
+        self.simulator.reset(state, **sim_reset_kw)
 
         self.sample_target()
         if target is not None:
