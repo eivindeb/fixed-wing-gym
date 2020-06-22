@@ -1273,7 +1273,7 @@ class FixedWingAircraft(gym.Env):
 
         return res
 
-    def generate_test_set(self, case_count, save_path, param=False):
+    def generate_test_set(self, case_count, save_path, param=False, rew_scaling=False, turbulence_noise=False):
         test_set = []
         for i in range(case_count):
             self.reset()
@@ -1281,6 +1281,10 @@ class FixedWingAircraft(gym.Env):
             if param:
                 params = self.get_simulator_parameters(normalize=False)
                 scenario["param"] = {k["name"]: params[i] for i, k in enumerate(self.cfg["simulator"]["model"]["parameters"])}
+            if rew_scaling:
+                scenario["rew_factors"] = {"action": {"scaling": np.random.uniform()}}
+            if turbulence_noise:
+                scenario["turbulence_noise"] = self.np_random.standard_normal(size=(4, self.steps_max))
             test_set.append(scenario)
         test_set = np.array(test_set)
         np.save(save_path, test_set)
