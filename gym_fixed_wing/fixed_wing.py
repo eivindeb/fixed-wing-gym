@@ -354,7 +354,7 @@ class FixedWingAircraft(gym.Env):
 
         self.use_curriculum = True
 
-    def reset(self, state=None, target=None, param=None, **sim_reset_kw):  # TODO: rew factor should be possible to set
+    def reset(self, state=None, target=None, param=None, rew_factors=None, **sim_reset_kw):
         """
         Reset state of environment.
 
@@ -402,14 +402,31 @@ class FixedWingAircraft(gym.Env):
 
         for i, rew_factor in enumerate(self._rew_factors_init):
             for attribute in rew_factor.get("randomize", []):
-                if rew_factor[attribute]["distribution"] == "uniform":
-                    self.cfg["reward"]["factors"][i][attribute] = self.np_random.uniform(rew_factor[attribute]["low"],
-                                                                                         rew_factor[attribute]["high"])
-                elif rew_factor[attribute]["distribution"] == "normal":
-                    self.cfg["reward"]["factors"][i][attribute] = self.np_random.normal(rew_factor[attribute]["loc"],
-                                                                                         rew_factor[attribute]["scale"])
+                if rew_factors is not None and rew_factor["name"] in rew_factors and attribute in rew_factors[rew_factor["name"]]:
+                    if attribute == "scaling":
+                        if rew_factor[attribute]["distribution"] == "uniform":
+                            val = self._linear_scale(rew_factors[rew_factor["name"]][attribute],
+                                                     rew_factor[attribute]["high"],
+                                                     rew_factor[attribute]["low"],
+                                                     1,
+                                                     0)
+                        elif rew_factor[attribute]["distribution"] == "normal":
+                            val = rew_factor[attribute]["loc"] + rew_factor[attribute]["scale"] * \
+                                self._linear_scale(rew_factors[rew_factor["name"]][attribute], 5, -5, 1, 0)
+                        else:
+                            raise NotImplementedError
+                        self.cfg["reward"]["factors"][i][attribute] = val
+                    else:
+                        raise NotImplementedError
                 else:
-                    raise NotImplementedError
+                    if rew_factor[attribute]["distribution"] == "uniform":
+                        self.cfg["reward"]["factors"][i][attribute] = self.np_random.uniform(rew_factor[attribute]["low"],
+                                                                                             rew_factor[attribute]["high"])
+                    elif rew_factor[attribute]["distribution"] == "normal":
+                        self.cfg["reward"]["factors"][i][attribute] = self.np_random.normal(rew_factor[attribute]["loc"],
+                                                                                             rew_factor[attribute]["scale"])
+                    else:
+                        raise NotImplementedError
 
 
         obs = self.get_observation()
@@ -556,7 +573,10 @@ class FixedWingAircraft(gym.Env):
             new_min = self.cfg["action"].get("scale_low")
         else:
             raise ValueError("Invalid value for direction {}".format(direction))
-        return np.array(new_max - new_min) * (a - old_min) / (old_max - old_min) + new_min
+        return self._linear_scale(a, new_max, new_min, old_max, old_min)
+
+    def _linear_scale(self, val, new_max, new_min, old_max, old_min):
+        return np.array(new_max - new_min) * (val - old_min) / (old_max - old_min) + new_min
 
     def sample_target(self):
         """
