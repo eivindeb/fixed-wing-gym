@@ -930,12 +930,19 @@ class FixedWingAircraft(gym.Env):
                         val = self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i]
                     elif obs_var["value"] == "integrator":
                         if self.history is None:
-                            val = self._get_error(obs_var["name"]) * obs_var["window_size"]
+                            if obs_var["window_size"] > 0:
+                                val = self._get_error(obs_var["name"]) * obs_var["window_size"]
+                            else:
+                                val = 0
                         else:
-                            window_high_idx = None if i == 1 else i - 1
-                            val = np.sum(self.history["error"][obs_var["name"]][-obs_var["window_size"] - (i - 1):window_high_idx])
-                            if self.steps_count - i < obs_var["window_size"]:
-                                val += (obs_var["window_size"] - (self.steps_count - i)) * self.history["error"][obs_var["name"]][0]
+                            if obs_var["window_size"] > 0:
+                                window_high_idx = None if i == 1 else -(i - 1)
+                                val = np.sum(self.history["error"][obs_var["name"]][-obs_var["window_size"] - (i - 1):window_high_idx])
+                                if self.steps_count - i < obs_var["window_size"]:
+                                    val += (obs_var["window_size"] - (self.steps_count - i)) * self.history["error"][obs_var["name"]][0]
+                            else:
+                                end_idx = None if i == 1 else -(i - 1)
+                                val = np.sum(self.history["error"][obs_var["name"]][:end_idx])
                     else:
                         raise ValueError("Unexpected observation variable target value type: {}".format(obs_var["value"]))
                 elif obs_var["type"] == "action":
