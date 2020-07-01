@@ -372,13 +372,6 @@ class FixedWingAircraft(gym.Env):
             self.save_on_reset = False
             self.save_on_reset_kw = {}
 
-        ts = np.load("D:\\dev\\rl-uav\\data\\test_set_lin_journal2.npy", allow_pickle=True)
-        state = ts[0]["state"]
-        target = ts[0]["target"]
-        param = ts[0]["param"]
-        #rew_factors = ts[0]["rew_factors"]
-        rew_factors = {"action": {"scaling": 0.5}}
-        sim_reset_kw = {"turbulence_noise": ts[0]["turbulence_noise"]}
         self.steps_count = 0
 
         if state is None and self.sampler is not None and False:
