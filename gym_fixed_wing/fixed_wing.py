@@ -64,6 +64,7 @@ class FixedWingAircraft(gym.Env):
         self.obs_norm_mean_mask = []
         self.obs_norm = self.cfg["observation"].get("normalize", False)
         self.obs_module_indices = {"pi": [], "vf": []}
+        self._obs = None
 
         obs_low = []
         obs_high = []
@@ -435,12 +436,15 @@ class FixedWingAircraft(gym.Env):
                     else:
                         raise NotImplementedError
 
+        self._obs = None
 
-        obs = self.get_observation()
-        self.history = {"action": [], "reward": [], "observation": [obs],
+        self.history = {"action": [], "reward": [],
                         "target": {k: [v] for k, v in self.target.items()},
                         "error": {k: [self._get_error(k)] for k in self.target.keys()}
                         }
+        obs = self.get_observation()
+        self.history["observation"] = [obs]
+
         if self.goal_enabled:
             self.history["goal"] = {}
             for state, status in self._get_goal_status().items():
@@ -912,16 +916,25 @@ class FixedWingAircraft(gym.Env):
 
         :return: ([float]) observation vector
         """
-        obs = []
+        step = self.cfg["observation"].get("step", 1)
+        if self._obs is None:
+            obs = []
+            obs_gen_steps = (self.cfg["observation"]["length"] + (1 if step == 1 else 0)) * step
+        else:
+            if self._obs["step"] == self.steps_count:
+                return self._obs["obs"]
+            obs = self._obs["obs"]
+            obs_gen_steps = 2
+
         if self.scale_actions:
             action_states = [state["name"] for state in self.cfg["action"]["states"]]
             action_indexes = {state["name"]: action_states.index(state["name"]) for state in self.cfg["observation"]["states"] if state["type"] == "action"}
-        step = self.cfg["observation"].get("step", 1)
+
         init_noise = None
         if self.obs_noise is not None:
             obs_noise = self.obs_noise()
 
-        for i in range(1, (self.cfg["observation"]["length"] + (1 if step == 1 else 0)) * step, step):
+        for i in range(1, obs_gen_steps, step):
             obs_i = []
             if i > self.steps_count:
                 i = self.steps_count + 1
@@ -1000,11 +1013,20 @@ class FixedWingAircraft(gym.Env):
                 else:
                     obs_i += obs_noise
             if self.cfg["observation"]["shape"] == "vector":
-                obs.extend(obs_i)
+                obs = obs_i + obs
+                if self._obs is not None and self.cfg["observation"]["length"] > 1:
+                    obs = obs[:-len(obs_i)]
             elif self.cfg["observation"]["shape"] == "matrix":
-                obs.append(obs_i)
+                if self._obs is None:
+                    obs.append(obs_i)
+                else:
+                    obs.insert(0, obs_i)
+                    if self.cfg["observation"]["length"] > 1:
+                        del obs[-1]
             else:
                 raise ValueError("Unexpected observation shape {}".format(self.cfg["observation"]["shape"]))
+
+        self._obs = {"step": self.steps_count, "obs": obs}
 
         return np.array(obs)
 
