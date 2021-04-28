@@ -574,9 +574,10 @@ class FixedWingAircraft(gym.Env):
                     else:
                         raise ValueError("Unexpected goal action {}".format(self.cfg["target"]["action"]))
 
-            reward = self.get_reward(action=self.history["action"][-1],
+            reward, rew_comps = self.get_reward(action=self.history["action"][-1],
                                      success=goal_achieved_on_step,
-                                     potential=self.cfg["reward"].get("form", "absolute") == "potential")
+                                     potential=self.cfg["reward"].get("form", "absolute") == "potential", return_dict=True)
+            info.update({"reward": rew_comps})
 
             resample_every = self.cfg["target"].get("resample_every", 0)
             if resample_target or (resample_every and self._steps_for_current_target >= resample_every):
@@ -897,7 +898,7 @@ class FixedWingAircraft(gym.Env):
                     res[state + "_target"] = self.history["target"][state]
             np.save(path, res)
 
-    def get_reward(self, action=None, success=False, potential=False):
+    def get_reward(self, action=None, success=False, potential=False, return_dict=False):
         """
         Get the reward for the current state of the environment.
 
@@ -905,6 +906,7 @@ class FixedWingAircraft(gym.Env):
         """
         reward = 0
         terms = {term["function_class"]: {"val": 0, "weight": term["weight"], "val_shaping": 0} for term in self.cfg["reward"]["terms"]}
+        comps = {}
 
         for component in self.cfg["reward"]["factors"]:
             if component["class"] == "action":
@@ -935,6 +937,11 @@ class FixedWingAircraft(gym.Env):
                     val = np.sum(self.history["error"][component["name"]][-component["window_size"]:])
                     if self.steps_count < component["window_size"]:
                         val += (component["window_size"] - self.steps_count) * self.history["error"][component["name"]][0]
+                elif component["type"] == "bound":
+                    state_val = self.simulator.state[component["name"]].value
+                    val = 0
+                    if component["low"] <= state_val <= component["high"]:
+                        val = component["value"]
                 else:
                     raise ValueError("Unexpected reward type {} for class state".format(component["type"]))
             elif component["class"] == "success":
@@ -973,6 +980,10 @@ class FixedWingAircraft(gym.Env):
             else:
                 raise ValueError("Unexpected function class {} for {}".format(component["function_class"],
                                                                               component["name"]))
+            comp_name = "{}_{}".format(component["name"], component["class"])
+            if "type" in component:
+                comp_name += "_{}".format(component["type"])
+            comps[comp_name] = val
 
             if component.get("shaping", False):
                 terms[component["function_class"]]["val_shaping"] += val * np.sign(component.get("sign", -1))
@@ -1000,7 +1011,10 @@ class FixedWingAircraft(gym.Env):
             self.prev_shaping[term_class] = term_info["val_shaping"]
             reward += term_info["weight"] * val
 
-        return reward
+        if return_dict:
+            return reward, comps
+        else:
+            return reward
 
     def get_observation(self):
         """
