@@ -1,10 +1,11 @@
 import gym
 from gym.utils import seeding
 from pyfly.pyfly import PyFly
+from pyfly.pid_controller import PIDController
 import json
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.gridspec
+#import matplotlib.pyplot as plt
+#import matplotlib.gridspec
 import copy
 import os
 from collections import deque
@@ -43,7 +44,7 @@ class FixedWingAircraft(gym.Env):
 
         if sim_config_kw is None:
             sim_config_kw = {}
-        sim_config_kw.update({"actuation": {"inputs": [a_s["name"] for a_s in self.cfg["action"]["states"]]}})
+        sim_config_kw.update({"actuation": {"inputs": [a_s["name"] for a_s in self.cfg["action"]["states"] + self.cfg["action"].get("pid", {"states": []})["states"]]}})
         sim_config_kw["turbulence_sim_length"] = self.cfg["steps_max"]
         pyfly_kw = {"config_kw": sim_config_kw}
         if sim_config_path is not None:
@@ -225,6 +226,21 @@ class FixedWingAircraft(gym.Env):
                 action_space_low.append(space_low)
             action_low.append(state_low)
 
+        if "pid" in self.cfg["action"]:
+            self.pid_controller = PIDController(self.simulator.dt)
+            pid_outputs = ["elevator", "aileron", "throttle"]
+            pid_references = [0 for i in range(len(pid_outputs))]
+            self.pid_actions = {}
+            for pid_action_var in self.cfg["action"]["pid"]["states"]:
+                assert pid_action_var["name"] in pid_outputs
+                assert pid_action_var["name"] in self.simulator.actuation.inputs
+                self.pid_actions[self.simulator.actuation.inputs.index(pid_action_var["name"])] = pid_outputs.index(pid_action_var["name"])
+                pid_references[pid_outputs.index(pid_action_var["name"])] = pid_action_var.get("reference", 0)
+            self.pid_controller.set_reference(*pid_references)
+        else:
+            self.pid_controller = None
+            self.pid_actions = None
+
         self.observation_space = gym.spaces.Box(low=np.array(obs_low), high=np.array(obs_high), dtype=np.float32)
         self.action_scale_to_low = np.array(action_low)
         self.action_scale_to_high = np.array(action_high)
@@ -374,6 +390,9 @@ class FixedWingAircraft(gym.Env):
 
         self.steps_count = 0
 
+        if self.pid_controller is not None:
+            self.pid_controller.reset()
+
         if state is None and self.sampler is not None and False:
             state = {}
             for init_state in ["roll", "pitch", "Va"]:
@@ -455,9 +474,8 @@ class FixedWingAircraft(gym.Env):
         :param action: ([float]) the action chosen by the agent
         :return: ([float], float, bool, dict) observation vector, reward, done, extra information about episode on done
         """
-        self.history["action"].append(np.copy(action))
-
         assert not np.any(np.isnan(action))
+        self.history["action"].append(np.copy(action))
 
         if self.scale_actions:
             action = self.linear_action_scaling(np.clip(action,
@@ -466,7 +484,19 @@ class FixedWingAircraft(gym.Env):
                                                         )
                                                 )
 
+
         control_input = list(action)
+
+        if self.pid_controller is not None:
+            pid_action = self.pid_controller.get_action(self.simulator.state["roll"].value,
+                                                        self.simulator.state["pitch"].value,
+                                                        self.simulator.state["Va"].value,
+                                                        self.simulator.get_states_vector(["omega_p", "omega_q", "omega_r"]))  # TODO: should add noise and stuff
+            for a_i, p_a_i in self.pid_actions.items():
+                if a_i >= action.shape[0]:
+                    control_input.append(pid_action[p_a_i])
+                else:
+                    control_input.insert(a_i, pid_action[p_a_i])
 
         step_success, step_info = self.simulator.step(control_input)
 
