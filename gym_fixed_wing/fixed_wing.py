@@ -276,7 +276,7 @@ class FixedWingAircraft(gym.Env):
         self._rew_factors_init = copy.deepcopy(self.cfg["reward"]["factors"])
         self._sim_model = copy.deepcopy(self.cfg["simulator"].get("model", {}))
 
-        self.training = True
+        self.delay_until_reset = True
         self.render_on_reset = False
         self.render_on_reset_kw = {}
         self.save_on_reset = False
@@ -807,7 +807,7 @@ class FixedWingAircraft(gym.Env):
         :return: (matplotlib Figure) if show is false in plot mode, the render figure is returned
         """
         # TODO: handle render call on reset env
-        if self.training and not self.render_on_reset:
+        if self.delay_until_reset and not self.render_on_reset:
             self.render_on_reset = True
             self.render_on_reset_kw = {"mode": mode, "show": show, "block": block, "close": close, "save_path": save_path}
             return None
@@ -885,7 +885,7 @@ class FixedWingAircraft(gym.Env):
         :param states: (string or [string]) names of states to save
         :param save_targets: (bool) save targets
         """
-        if self.training and not self.save_on_reset:
+        if self.delay_until_reset and not self.save_on_reset:
             self.save_on_reset = True
             self.save_on_reset_kw = {"path": path, "states": states, "save_targets": save_targets}
             return
