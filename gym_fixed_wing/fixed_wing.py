@@ -1401,8 +1401,7 @@ class FixedWingAircraft(gym.Env):
             control_commands = np.array([self.simulator.state[actuator["name"]].history["command"] for actuator in
                                          self.cfg["action"]["states"]])
             delta_controls = np.diff(control_commands, axis=1)
-            res["all"] = np.sum(np.abs(delta_controls)) / (
-                        3 * self.simulator.dt * delta_controls.shape[1])
+            res["all"] = np.sum(np.abs(delta_controls)) / (np.prod(delta_controls.shape) * self.simulator.dt)
 
 
         if metric in ["success", "settling_time"]:
