@@ -58,6 +58,8 @@ class FixedWingAircraft(gym.Env):
         self._steps_for_current_target = None
         self.goal_achieved = False
 
+        self._integrator_decay_states = {}
+
         self.viewer = None
 
         self.np_random = np.random.RandomState()
@@ -66,6 +68,7 @@ class FixedWingAircraft(gym.Env):
         self.obs_norm = self.cfg["observation"].get("normalize", False)
         self.obs_module_indices = {"pi": [], "vf": []}
         self._obs = None
+        self._obs_latency_lambda = None
 
         obs_low = []
         obs_high = []
@@ -152,6 +155,9 @@ class FixedWingAircraft(gym.Env):
             else:
                 self.obs_module_indices["pi"].append(i)
                 self.obs_module_indices["vf"].append(i)
+
+            if obs_var.get("value", None) == "integrator" and obs_var.get("int_type", None) == "decay":
+                self._integrator_decay_states[obs_var["name"]] = {"value": 0, "decay_factor": obs_var["decay_factor"]}
 
         if self.cfg["observation"].get("noise", None) is not None:
             sigma = self.cfg["observation"]["noise"]["sigma"] * np.array([var.get("noise_weight", 0) for var in self.cfg["observation"]["states"]])
@@ -453,9 +459,37 @@ class FixedWingAircraft(gym.Env):
 
         self._obs = None
 
+        for state_name in self._integrator_decay_states:
+            self._integrator_decay_states[state_name]["value"] = 0
+
+        if self.cfg["observation"].get("latency", None) is not None:
+            base_cfg, noise_cfg = self.cfg["observation"]["latency"]["base"], self.cfg["observation"]["latency"].get("noise", None)
+            if base_cfg["distribution"] == "constant":
+                base = base_cfg["value"]
+            elif base_cfg["distribution"] == "uniform":
+                base = self.np_random.uniform(base_cfg["low"], base_cfg["high"])
+            elif base_cfg["distribution"] == "normal":
+                base = np.clip(self.np_random.normal(base_cfg["loc"], base_cfg["scale"]), 0, None)
+            else:
+                ValueError("Unexpected distribution type {}".format(base_cfg["distribution"]))
+
+            if noise_cfg is not None:
+                if noise_cfg["distribution"] == "uniform":
+                    self._obs_latency_lambda = lambda: base + self.np_random.uniform(noise_cfg["low"], noise_cfg["high"])
+                elif noise_cfg["distribution"] == "normal":
+                    self._obs_latency_lambda = lambda: base + np.clip(self.np_random.normal(noise_cfg["loc"], noise_cfg["scale"]), 0, None)
+                elif noise_cfg["distribution"] == "exponential":
+                    rate = self.np_random.uniform(noise_cfg["low"], noise_cfg["high"])
+                    self._obs_latency_lambda = lambda: base + self.np_random.exponential(1 / rate)
+                else:
+                    ValueError("Unexpected distribution type {}".format(noise_cfg["distribution"]))
+            else:
+                self._obs_latency_lambda = lambda: base
+
         self.history = {"action": [], "reward": [],
                         "target": {k: [v] for k, v in self.target.items()},
-                        "error": {k: [self._get_error(k)] for k in self.target.keys()}
+                        "error": {k: [self._get_error(k)] for k in self.target.keys()},
+                        "integrator_decay": {k: [v["value"]] for k, v in self._integrator_decay_states.items()}
                         }
         obs = self.get_observation()
         self.history["observation"] = [obs]
@@ -549,6 +583,11 @@ class FixedWingAircraft(gym.Env):
                 self.history["target"][k].append(v)
                 self.history["error"][k].append(self._get_error(k))
 
+            for state_name, state_props in self._integrator_decay_states.items():
+                new_int_val = state_props["value"] * state_props["decay_factor"] + self._get_error(state_name)  # TODO: add support for non target states?
+                self._integrator_decay_states[state_name]["value"] = new_int_val
+                self.history["integrator_decay"][state_name].append(new_int_val)
+
             obs = self.get_observation()
             self.history["observation"].append(obs)
             self.history["reward"].append(reward)
@@ -559,11 +598,17 @@ class FixedWingAircraft(gym.Env):
                 reward = self.steps_count - self.steps_max
             else:
                 reward = reward_fail
+            info["reward"] = {"termination": reward}
             info["termination"] = step_info["termination"]
             for k, v in self._get_next_target().items():
                 self.target[k] = v
                 self.history["target"][k].append(v)
                 self.history["error"][k].append(self._get_error(k))
+
+            for state_name, state_props in self._integrator_decay_states.items():
+                new_int_val = state_props["value"] * state_props["decay_factor"] + self._get_error(state_name)  # TODO: add support for non target states?
+                self._integrator_decay_states[state_name]["value"] = new_int_val
+                self.history["integrator_decay"][state_name].append(new_int_val)
 
             for state, status in self._get_goal_status().items():
                 self.history["goal"][state].append(status)
@@ -714,19 +759,36 @@ class FixedWingAircraft(gym.Env):
 
         step_length_properties = self.cfg["simulator"].get("dt", None)
         if step_length_properties is not None:
-            if "values" in step_length_properties:
-                probs = step_length_properties.get("probabilities", None)
-                if probs is not None:
-                    probs = np.array(probs)
-                val = self.np_random.choice(step_length_properties["values"], p=probs)
-            elif step_length_properties["type"] == "uniform":
-                val = self.np_random.uniform(step_length_properties["low"], step_length_properties["high"])
-                if isinstance(step_length_properties["low"], bool):
-                    val = bool(val)
-            elif step_length_properties["type"] == "exponential":
-                rate = self.np_random.uniform(step_length_properties["low"], step_length_properties["high"])
-                self.step_size_lambda = lambda: step_length_properties["base"] + self.np_random.exponential(1 / rate)
+            if not isinstance(step_length_properties["base"], dict): # TODO: this is backwards compatability
+                base = step_length_properties["base"]
+            elif step_length_properties["base"]["distribution"] == "constant":
+                base = step_length_properties["base"]["value"]
+            elif step_length_properties["base"]["distribution"] == "uniform":
+                base = self.np_random.uniform(step_length_properties["base"]["low"], step_length_properties["base"]["high"])
+            elif step_length_properties["base"]["distribution"] == "normal":
+                base = self.np_random.normal(step_length_properties["base"]["loc"],
+                                              step_length_properties["base"]["scale"])
+            elif step_length_properties["base"]["distribution"] == "choice":
+                base = self.np_random.choice(step_length_properties["base"]["values"], p=step_length_properties.get("p", None))
+            else:
+                raise ValueError("Unexpected distribution type of simulator dt base {}".format(step_length_properties["base"]["distribution"]))
+
+            if step_length_properties.get("noise", None) is not None:
+                if step_length_properties["noise"]["distribution"] == "uniform":
+                    self.step_size_lambda = base + self.np_random.uniform(step_length_properties["base"]["low"],
+                                                                          step_length_properties["base"]["high"])
+                elif step_length_properties["noise"]["distribution"] == "normal":
+                    self.step_size_lambda = base + self.np_random.normal(step_length_properties["base"]["loc"],
+                                                                         step_length_properties["base"]["scale"])
+                elif step_length_properties["noise"]["distribution"] == "exponential":
+                    rate = self.np_random.uniform(step_length_properties["noise"]["low"], step_length_properties["noise"]["high"])
+                    self.step_size_lambda = lambda: base + self.np_random.exponential(1 / rate)
+                else:
+                    raise ValueError("Unexpected distribution type of simulator dt noise {}".format(step_length_properties["noise"]["distribution"]))
                 val = self.step_size_lambda()
+            else:
+                self.step_size_lambda = None
+                val = base
             self.simulator.dt = val
 
     def render(self, mode="plot", show=True, close=True, block=False, save_path=None):
@@ -960,6 +1022,14 @@ class FixedWingAircraft(gym.Env):
         if self.obs_noise is not None:
             obs_noise = self.obs_noise()
 
+        if self._obs_latency_lambda is not None:
+            latency = self._obs_latency_lambda()
+            intp_start_idx = int(np.ceil(latency / self.simulator.dt))
+            intp_end_idx = int(np.floor(latency / self.simulator.dt))
+            intp_point = (latency / self.simulator.dt) % 1
+        else:
+            latency = None
+
         for i in range(1, obs_gen_steps, step):
             obs_i = []
             if i > self.steps_count:
@@ -968,27 +1038,62 @@ class FixedWingAircraft(gym.Env):
                     init_noise = self.np_random.normal(loc=0, scale=0.5) * self.simulator.dt
             for obs_var in self.cfg["observation"]["states"]:
                 if obs_var["type"] == "state":
-                    val = self.simulator.state[obs_var["name"]].history[-i]
+                    if latency is not None:
+                        if intp_start_idx == intp_end_idx:
+                            val = self.simulator.state[obs_var["name"]].history[-i - intp_end_idx]
+                        elif intp_start_idx + i > len(self.simulator.state[obs_var["name"]].history):
+                            val = self.simulator.state[obs_var["name"]].history[0]
+                        else:
+                            val = self.simulator.state[obs_var["name"]].history[-i - intp_start_idx] * intp_point + \
+                                  self.simulator.state[obs_var["name"]].history[-i - intp_end_idx] * (1 - intp_point)
+                    else:
+                        val = self.simulator.state[obs_var["name"]].history[-i]
                 elif obs_var["type"] == "target":
                     if obs_var["value"] == "relative":
-                        val = self._get_error(obs_var["name"]) if i == 1 else self.history["error"][obs_var["name"]][-i]
-                    elif obs_var["value"] == "absolute":
-                        val = self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i]
-                    elif obs_var["value"] == "integrator":
-                        if self.history is None:
-                            if obs_var["window_size"] > 0:
-                                val = self._get_error(obs_var["name"]) * obs_var["window_size"]
+                        if latency is not None:
+                            if intp_start_idx == intp_end_idx:
+                                val = self.history["error"][obs_var["name"]][-i - intp_end_idx]
+                            elif intp_start_idx + i > len(self.history["error"][obs_var["name"]]):
+                                val = self.history["error"][obs_var["name"]][0]
                             else:
-                                val = 0
+                                val = self.history["error"][obs_var["name"]][-i - intp_start_idx] * intp_point + \
+                                      (self._get_error(obs_var["name"]) if intp_end_idx == 0 else self.history["error"][obs_var["name"]][-i - intp_end_idx]) * (1 - intp_point)
+
                         else:
-                            if obs_var["window_size"] > 0:
-                                window_high_idx = None if i == 1 else -(i - 1)
-                                val = np.sum(self.history["error"][obs_var["name"]][-obs_var["window_size"] - (i - 1):window_high_idx])
-                                if self.steps_count - i < obs_var["window_size"]:
-                                    val += (obs_var["window_size"] - (self.steps_count - i)) * self.history["error"][obs_var["name"]][0]
+                            val = self._get_error(obs_var["name"]) if i == 1 else self.history["error"][obs_var["name"]][-i]
+                    elif obs_var["value"] == "absolute":
+                        if latency is not None:
+                            if intp_start_idx == intp_end_idx:
+                                val = self.history["target"][obs_var["name"]][-i - intp_end_idx]
+                            elif intp_start_idx + i > len(self.history["target"][obs_var["name"]]):
+                                val = self.history["target"][obs_var["name"]][0]
                             else:
-                                end_idx = None if i == 1 else -(i - 1)
-                                val = np.sum(self.history["error"][obs_var["name"]][:end_idx])
+                                val = self.history["target"][obs_var["name"]][-i - intp_start_idx] * intp_point + \
+                                      (self.target[obs_var["name"]] if intp_end_idx == 0 else
+                                       self.history["target"][obs_var["name"]][-i - intp_end_idx]) * (1 - intp_point)
+
+                        else:
+                            val = self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i]
+                    elif obs_var["value"] == "integrator":  # TODO: add latency to integrator
+                        if obs_var.get("int_type", "window") == "window":
+                            if self.history is None:
+                                if obs_var["window_size"] > 0:
+                                    val = self._get_error(obs_var["name"]) * obs_var["window_size"]
+                                else:
+                                    val = 0
+                            else:
+                                if obs_var["window_size"] > 0:
+                                    window_high_idx = None if i == 1 else -(i - 1)
+                                    val = np.sum(self.history["error"][obs_var["name"]][-obs_var["window_size"] - (i - 1):window_high_idx])
+                                    if self.steps_count - i < obs_var["window_size"]:
+                                        val += (obs_var["window_size"] - (self.steps_count - i)) * self.history["error"][obs_var["name"]][0]
+                                else:
+                                    end_idx = None if i == 1 else -(i - 1)
+                                    val = np.sum(self.history["error"][obs_var["name"]][:end_idx])
+                        elif obs_var.get("int_type", "window") == "decay":
+                            val = self._integrator_decay_states[obs_var["name"]]["value"] if i == 1 else self.history["integrator_decay"][obs_var["name"]][-i]
+                        else:
+                            raise ValueError("Unexpected observation variable integration type: {}".format(obs_var["int_type"]))
                     else:
                         raise ValueError("Unexpected observation variable target value type: {}".format(obs_var["value"]))
                 elif obs_var["type"] == "action":
