@@ -1110,6 +1110,11 @@ class FixedWingAircraft(gym.Env):
                                     val = np.sum(self.history["error"][obs_var["name"]][:end_idx])
                         elif obs_var.get("int_type", "window") == "decay":
                             val = self._integrator_decay_states[obs_var["name"]]["value"] if i == 1 else self.history["integrator_decay"][obs_var["name"]][-i]
+                        elif obs_var.get("int_type", "window") == "euler":
+                            if self.history is None:
+                                val = 0
+                            else:
+                                val = np.sum(self.history["error"][obs_var["name"]][:None if i == 1 else -(i - 1)]) * self.simulator.dt  # TODO: will be some error here as dt can change from timestep to timestep
                         else:
                             raise ValueError("Unexpected observation variable integration type: {}".format(obs_var["int_type"]))
                     else:
