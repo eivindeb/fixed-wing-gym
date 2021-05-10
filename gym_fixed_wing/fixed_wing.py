@@ -186,11 +186,11 @@ class FixedWingAircraft(gym.Env):
             if self.cfg["observation"]["shape"] == "vector":
                 obs_low = obs_low * self.cfg["observation"]["length"]
                 obs_high = obs_high * self.cfg["observation"]["length"]
-                self.obs_norm_mean_mask = self.obs_norm_mean_mask * self.cfg["observation"]["length"]
+                #self.obs_norm_mean_mask = self.obs_norm_mean_mask * self.cfg["observation"]["length"]
             elif self.cfg["observation"]["shape"] == "matrix":
                 obs_low = [obs_low for _ in range(self.cfg["observation"]["length"])]
                 obs_high = [obs_high for _ in range(self.cfg["observation"]["length"])]
-                self.obs_norm_mean_mask = [self.obs_norm_mean_mask for _ in range(self.cfg["observation"]["length"])]
+                #self.obs_norm_mean_mask = [self.obs_norm_mean_mask for _ in range(self.cfg["observation"]["length"])]
             else:
                 raise ValueError
 
