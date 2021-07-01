@@ -738,6 +738,8 @@ class FixedWingAircraft(gym.Env):
         param_value_clip = self._sim_model.get("clip", None)
         var_type = self._sim_model.get("var_type", "relative")
         for param_arguments in self._sim_model.get("parameters", []):
+            if param_arguments.get("dist_type", None) is None:
+                param_arguments["dist_type"] = dist_type
             if self.sampler is not None and self.sampler.variable_in_sampler(param_arguments["name"]):
                 param_value = self.sampler.draw_sample(param_arguments["name"])
             else:
@@ -746,19 +748,25 @@ class FixedWingAircraft(gym.Env):
                 if orig_param_value is None:
                     orig_param_value = self.simulator.params[param_arguments["name"]]
                     param_arguments["original"] = orig_param_value
-                if orig_param_value != 0 and var_type == "relative":
-                    var *= np.abs(orig_param_value)
-                if dist_type == "gaussian":
-                    param_value = self.np_random.normal(loc=orig_param_value, scale=var)
-                    clip = param_arguments.get("clip", param_value_clip)
-                    if clip is not None:
-                        if orig_param_value != 0 and var_type == "relative":
-                            clip *= np.abs(orig_param_value)
-                        param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
-                elif dist_type == "uniform":
-                    param_value = self.np_random.uniform(low=orig_param_value - var, high=orig_param_value + var)
+                if orig_param_value == 0:
+                    param_value = 0
                 else:
-                    raise ValueError("Unexpected distribution type {}".format(dist_type))
+                    if var_type == "relative":
+                        var *= np.abs(orig_param_value)
+                    if param_arguments["dist_type"] == "gaussian":
+                        param_value = self.np_random.normal(loc=orig_param_value, scale=var)
+                        clip = param_arguments.get("clip", param_value_clip)
+                        if clip is not None:
+                            if orig_param_value != 0 and var_type == "relative":
+                                clip *= np.abs(orig_param_value)
+                            param_value = np.clip(param_value, orig_param_value - clip, orig_param_value + clip)
+                    elif param_arguments["dist_type"] == "uniform":
+                        param_value = self.np_random.uniform(low=orig_param_value - var, high=orig_param_value + var)
+                    elif param_arguments["dist_type"] == "beta":
+                        param_value = self.np_random.beta(**param_arguments["kw"])
+                    else:
+                        raise ValueError("Unexpected distribution type {}".format(dist_type))
+                param_value *= param_arguments.get("scaling", 1)
 
             self.simulator.params[param_arguments["name"]] = param_value
 
