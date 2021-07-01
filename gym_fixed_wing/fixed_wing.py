@@ -238,18 +238,21 @@ class FixedWingAircraft(gym.Env):
 
         if "pid" in self.cfg["action"]:
             self.pid_controller = PIDController(self.simulator.dt)
-            pid_outputs = ["elevator", "aileron", "throttle"]
-            pid_references = [0 for i in range(len(pid_outputs))]
-            self.pid_actions = {}
-            for pid_action_var in self.cfg["action"]["pid"]["states"]:
-                assert pid_action_var["name"] in pid_outputs
-                assert pid_action_var["name"] in self.simulator.actuation.inputs
-                self.pid_actions[self.simulator.actuation.inputs.index(pid_action_var["name"])] = pid_outputs.index(pid_action_var["name"])
-                pid_references[pid_outputs.index(pid_action_var["name"])] = pid_action_var.get("reference", 0)
-            self.pid_controller.set_reference(*pid_references)
+            if len(self.cfg["action"]["pid"].get("states", [])):
+                pid_outputs = ["elevator", "aileron", "throttle"]
+                pid_references = [0 for i in range(len(pid_outputs))]
+                self.pid_actions = {}
+                for pid_action_var in self.cfg["action"]["pid"]["states"]:
+                    assert pid_action_var["name"] in pid_outputs
+                    assert pid_action_var["name"] in self.simulator.actuation.inputs
+                    self.pid_actions[self.simulator.actuation.inputs.index(pid_action_var["name"])] = pid_outputs.index(pid_action_var["name"])
+                    pid_references[pid_outputs.index(pid_action_var["name"])] = pid_action_var.get("reference", 0)
+                self.pid_references = pid_references
+                self.pid_controller.set_reference(*pid_references)
         else:
             self.pid_controller = None
             self.pid_actions = None
+            self.pid_references = None
 
         self.observation_space = gym.spaces.Box(low=np.array(obs_low), high=np.array(obs_high), dtype=np.float32)
         self.action_scale_to_low = np.array(action_low)
@@ -525,7 +528,7 @@ class FixedWingAircraft(gym.Env):
 
         control_input = list(action)
 
-        if self.pid_controller is not None:
+        if "pid" in self.cfg["action"] and self.pid_references is not None:
             pid_action = self.pid_controller.get_action(self.simulator.state["roll"].value,
                                                         self.simulator.state["pitch"].value,
                                                         self.simulator.state["Va"].value,
