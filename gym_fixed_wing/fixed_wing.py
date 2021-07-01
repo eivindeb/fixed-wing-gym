@@ -96,7 +96,7 @@ class FixedWingAircraft(gym.Env):
                             raise ValueError
                     else:
                         high = factor[obs_var["value"]]
-                elif obs_var["type"] == "sim":
+                elif obs_var["type"] in ["sim", "parameter"]:
                     high = np.finfo(np.float32).max
                 else:
                     raise ValueError
@@ -124,7 +124,7 @@ class FixedWingAircraft(gym.Env):
                             raise ValueError
                     else:
                         low = factor[obs_var["value"]]
-                elif obs_var["type"] == "sim":
+                elif obs_var["type"] in ["sim", "parameter"]:
                     low = -np.finfo(np.float32).max
                 else:
                     raise ValueError
@@ -1154,6 +1154,8 @@ class FixedWingAircraft(gym.Env):
                     val = self._get_rew_factor(obs_var["name"])[obs_var["value"]]
                 elif obs_var["type"] == "sim":
                     val = getattr(self.simulator, obs_var["name"])
+                elif obs_var["type"] == "parameter":
+                    val = self.simulator.params[obs_var["name"]]
                 else:
                     raise Exception("Unexpected observation variable type: {}".format(obs_var["type"]))
                 if init_noise is not None and not obs_var["type"] == "target":
