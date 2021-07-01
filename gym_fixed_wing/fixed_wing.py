@@ -949,10 +949,22 @@ class FixedWingAircraft(gym.Env):
                     if self.steps_count < component["window_size"]:
                         val += (component["window_size"] - self.steps_count) * self.history["error"][component["name"]][0]
                 elif component["type"] == "bound":
-                    state_val = self.simulator.state[component["name"]].value
+                    if component.get("value_type", "value") == "value":
+                        state_val = self.simulator.state[component["name"]].value
+                    elif component.get("value_type", "value") == "dot":
+                        if len(self.simulator.state[component["name"]].history) <= 1:
+                            state_val = 0
+                        else:
+                            state_val = (self.simulator.state[component["name"]].value - self.simulator.state[component["name"]].history[-2]) / self.simulator.dt
+                    else:
+                        raise NotImplementedError
                     val = 0
                     if component["low"] <= state_val <= component["high"]:
                         val = component["value"]
+                elif component["type"] == "delta":
+                    val = self.simulator.state[component["name"]].value - self.simulator.state[component["name"]].history[-1]
+                elif component["type"] == "dot":
+                    val = (self.simulator.state[component["name"]].value - self.simulator.state[component["name"]].history[-1]) / self.simulator.dt
                 else:
                     raise ValueError("Unexpected reward type {} for class state".format(component["type"]))
             elif component["class"] == "success":
