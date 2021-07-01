@@ -791,10 +791,10 @@ class FixedWingAircraft(gym.Env):
 
             if step_length_properties.get("noise", None) is not None:
                 if step_length_properties["noise"]["distribution"] == "uniform":
-                    self.step_size_lambda = base + self.np_random.uniform(step_length_properties["base"]["low"],
+                    self.step_size_lambda = lambda: base + self.np_random.uniform(step_length_properties["base"]["low"],
                                                                           step_length_properties["base"]["high"])
                 elif step_length_properties["noise"]["distribution"] == "normal":
-                    self.step_size_lambda = base + self.np_random.normal(step_length_properties["base"]["loc"],
+                    self.step_size_lambda = lambda: base + self.np_random.normal(step_length_properties["base"]["loc"],
                                                                          step_length_properties["base"]["scale"])
                 elif step_length_properties["noise"]["distribution"] == "exponential":
                     rate = self.np_random.uniform(step_length_properties["noise"]["low"], step_length_properties["noise"]["high"])
