@@ -968,7 +968,10 @@ class FixedWingAircraft(gym.Env):
                 elif component["type"] == "delta":
                     val = self.simulator.state[component["name"]].value - self.simulator.state[component["name"]].history[-1]
                 elif component["type"] == "dot":
-                    val = (self.simulator.state[component["name"]].value - self.simulator.state[component["name"]].history[-1]) / self.simulator.dt
+                    if len(self.simulator.state[component["name"]].history) <= 1:
+                        val = 0
+                    else:
+                        val = (self.simulator.state[component["name"]].value - self.simulator.state[component["name"]].history[-2]) / self.simulator.dt
                 else:
                     raise ValueError("Unexpected reward type {} for class state".format(component["type"]))
             elif component["class"] == "success":
