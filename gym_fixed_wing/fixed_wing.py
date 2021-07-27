@@ -264,6 +264,10 @@ class FixedWingAircraft(gym.Env):
                                            dtype=np.float32)
 
         self.scale_actions = self.cfg["action"].get("scale_space", False)
+        self.trim = np.array([av.get("trim", np.nan) for av in self.cfg["action"]["states"]])
+        if self.scale_actions:
+            self.trim = self.linear_action_scaling(self.trim, direction="backward")
+        self.trim[np.isnan(self.trim)] = 0
 
         if self.cfg["action"].get("bounds_multiplier", None) is not None:
             self.action_bounds_max = np.full(self.action_space.shape, self.cfg["action"].get("scale_high", 1)) *\
@@ -519,7 +523,7 @@ class FixedWingAircraft(gym.Env):
         self.history["action"].append(np.copy(action))
 
         if self.scale_actions:
-            action = self.linear_action_scaling(np.clip(action,
+            action = self.linear_action_scaling(np.clip(action + self.trim,
                                                         self.cfg["action"].get("scale_low"),
                                                         self.cfg["action"].get("scale_high")
                                                         )
