@@ -998,6 +998,20 @@ class FixedWingAircraft(gym.Env):
                     val += component["value"] if self._get_goal_status()["all"] else 0
                 else:
                     raise ValueError("Unexpected reward type {} for class goal".format(component["type"]))
+            elif component["class"] == "gain":
+                if component["name"] == "roll":
+                    actuator = "aileron"
+                elif component["name"] == "pitch":
+                    actuator = "elevator"
+                elif component["name"] == "Va":
+                    actuator = "throttle"
+                else:
+                    raise ValueError
+                control_command = self.simulator.state[actuator].history["command"][-1]
+                error = self.history["error"][component["name"]][-1]
+                val = np.abs(control_command / error)
+                if component["type"] == "bound":
+                    val = component["value"] if val <= component["high"] else 0
             else:
                 raise ValueError("Unexpected reward component type {}".format(component["class"]))
 
@@ -1440,6 +1454,20 @@ class FixedWingAircraft(gym.Env):
             delta_controls = np.diff(control_commands, axis=1)
             res["all"] = np.sum(np.abs(delta_controls)) / (np.prod(delta_controls.shape) * self.simulator.dt)
 
+        if metric == "gain":
+            res = {}
+            for state in self.cfg["target"]["states"]:
+                if state["name"] == "roll":
+                    actuator = "aileron"
+                elif state["name"] == "pitch":
+                    actuator = "elevator"
+                elif state["name"] == "Va":
+                    actuator = "throttle"
+                else:
+                    continue
+                control_commands = np.array(self.simulator.state[actuator].history["command"])
+                errors = np.array(self.history["error"][state["name"]])[:control_commands.shape[0]]
+                res[state["name"]] = np.mean(np.abs(control_commands / errors))
 
         if metric in ["success", "settling_time"]:
             for state, goal_status in self.history["goal"].items():

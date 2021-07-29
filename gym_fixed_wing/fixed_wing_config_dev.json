@@ -236,38 +236,26 @@
     ],
     "factors": [
       {
-        "name": "step",
-        "class": "step",
+        "name": "roll",
+        "class": "gain",
+        "type": "bound",
         "function_class": "linear",
+        "high": 4,
         "scaling": 1,
-        "value": 1,
-        "shaping": false,
-        "sign": -1
-      },
-      {
-        "name": "goal",
-        "class": "goal",
-        "type": "all",
-        "function_class": "linear",
-        "scaling": 1,
-        "value": 1,
+        "value": 0.167,
         "shaping": false,
         "sign": 1
       },
       {
-        "name": "action",
-        "class": "action",
-        "type": "delta",
+        "name": "pitch",
+        "class": "gain",
+        "type": "bound",
         "function_class": "linear",
-        "window_size": 6,
-        "scaling": {
-          "distribution": "uniform",
-          "low": 5,
-          "high": 60
-        },
+        "high": 4,
+        "scaling": 1,
+        "value": 0.167,
         "shaping": false,
-        "randomize": ["scaling"],
-        "sign": -1
+        "sign": 1
       }
     ]
   },
@@ -444,6 +432,9 @@
     },
     {
       "name": "end_error"
+    },
+    {
+      "name": "gain"
     }
   ]
 }
