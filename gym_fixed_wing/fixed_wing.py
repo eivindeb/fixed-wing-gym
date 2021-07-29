@@ -1551,6 +1551,8 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
                                                     sim_config_kw=sim_config_kw
                                                     )
 
+        self.prev_history = None
+        self.prev_sim_state = None
         goal_states = self.cfg["observation"]["goals"]
         self.goal_states = [goal["name"] for goal in self.cfg["observation"]["goals"]]
 
@@ -1632,6 +1634,11 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
             observation=gym.spaces.Box(obs_low, obs_high, dtype="float32")
         ))
 
+    def reset(self, state=None, target=None, param=None, rew_factors=None, dt=None, **sim_reset_kw):
+        self.prev_history = copy.deepcopy(self.history)
+        self.prev_sim_state = copy.deepcopy(self.simulator.state)
+        return super().reset(state, target, param, rew_factors, dt, **sim_reset_kw)
+
     def get_observation(self):
         obs = super(FixedWingAircraftGoal, self).get_observation()
         achieved_goal = obs[..., self.obs_idxs["achieved"]]
@@ -1660,18 +1667,38 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         return np.array(low), np.array(high)
 
     def compute_reward(self, achieved_goal, desired_goal, info):
-        original_values = {"achieved": {}, "desired": {}, "steps_count": self.steps_count}
-        if self.history is not None:
-            original_values["action_history"] = copy.deepcopy(self.history["action"])
+        history_end = info.get("step", None)
+        if history_end is not None:
+            history_end += 1
+        original_values = {"achieved": {}, "desired": {}, "steps_count": self.steps_count, "history": copy.deepcopy(self.history), "sim_state": copy.deepcopy(self.simulator.state)}
+
+        for h_name, h_vals in self.prev_history.items():
+            if isinstance(h_vals, dict):
+                for k, v in h_vals.items():
+                    self.history[h_name][k] = v[:history_end]
+            else:
+                self.history[h_name] = h_vals[:history_end]
+
+        for s_name, s_var in self.simulator.state.items():
+            if s_name in ["attitude", "rudder"]:
+                continue
+            elif s_name in ["elevon_left", "elevon_right", "elevator", "aileron", "throttle"]:
+                s_var.history["value"] = self.prev_sim_state[s_name].history["value"][:history_end]
+                s_var.history["dot"] = self.prev_sim_state[s_name].history["dot"][:history_end]
+                s_var.history["command"] = self.prev_sim_state[s_name].history["command"][:history_end]
+                s_var.value = s_var.history["value"][-1]
+            else:
+                s_var.history = self.prev_sim_state[s_name].history[:history_end]
+                s_var.value = s_var.history[-1]
 
         if self.obs_norm:
             achieved_goal = achieved_goal * self.goal_vars + self.goal_means
             desired_goal = desired_goal * self.goal_vars + self.goal_means
 
         action = info.get("action", np.array(np.zeros(shape=(len(self.cfg["action"]["states"])))))
-        self.history["action"] = self.history["action"][:info["step"]] # TODO: this assumes that this function is called with transitions from the trajectory currently saved in the environment (might not work for multiprocessing etc., and if reset)
+        self.history["action"] = self.history["action"][:history_end - 1] # TODO: this assumes that this function is called with transitions from the trajectory currently saved in the environment (might not work for multiprocessing etc., and if reset). It doesnt, and when done like this it would underestimate the cost of delta_action.
         self.history["action"].append(action)
-        self.steps_count = info["step"]
+        self.steps_count = info.get("step", 0)
         success = False  # TODO: dont know if i want to use this, is get_goal_status in any case
 
         for i, goal_state in enumerate(self.goal_states):
@@ -1701,8 +1728,8 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
             self.simulator.state[goal_state].value = original_values["achieved"][goal_state]
             self.target[goal_state] = original_values["desired"][goal_state]
 
-        if self.history is not None:
-            self.history["action"] = original_values["action_history"]
+        self.history = original_values["history"]
+        self.simulator.state = original_values["sim_state"]
         self.steps_count = original_values["steps_count"]
         if potential:
             self.prev_shaping = original_values["prev_shaping"]
