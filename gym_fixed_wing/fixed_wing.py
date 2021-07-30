@@ -1702,27 +1702,23 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         return np.array(low), np.array(high)
 
     def compute_reward(self, achieved_goal, desired_goal, info):
-        original_values = {"achieved": {}, "desired": {}, "steps_count": self.steps_count}
-        if self.history is not None:
-            original_values["action_history"] = copy.deepcopy(self.history["action"])
-
+        step = info.get("step")
+        original_values = {"error": {}, "goal": {}, "target": {}}
         if self.obs_norm:
             achieved_goal = achieved_goal * self.goal_vars + self.goal_means
             desired_goal = desired_goal * self.goal_vars + self.goal_means
-
-        action = info.get("action", np.array(np.zeros(shape=(len(self.cfg["action"]["states"])))))
-        self.history["action"] = self.history["action"][:info["step"]] # TODO: this assumes that this function is called with transitions from the trajectory currently saved in the environment (might not work for multiprocessing etc., and if reset)
-        self.history["action"].append(action)
-        self.steps_count = info["step"]
         success = False  # TODO: dont know if i want to use this, is get_goal_status in any case
 
         for i, goal_state in enumerate(self.goal_states):
-            original_values["achieved"][goal_state] = self.simulator.state[goal_state].value
-            original_values["desired"][goal_state] = self.target[goal_state]
-            self.target[goal_state] = desired_goal[i]
+            original_values["error"][goal_state] = self.history["error"][goal_state][step]
+            original_values["goal"][goal_state] = self.history["goal"][goal_state][step]
+            original_values["target"][goal_state] = self.history["target"][goal_state][step]
+
+        original_values["goal"]["all"] = self.history["goal"]["all"][step]
 
         potential = self.cfg["reward"]["form"] == "potential"
         if potential:
+            raise NotImplementedError
             original_values["prev_shaping"] = self.prev_shaping
             if info["step"] > 0:
                 # Update prev_shaping to state before transition
@@ -1735,17 +1731,21 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
                     self.prev_shaping[rew_term["function_class"]] = None
 
         for i, goal_state in enumerate(self.goal_states):
-            self.simulator.state[goal_state].value = achieved_goal[i]
+            self.history["target"][goal_state][step] = desired_goal[i]
+            self.history["error"][goal_state][step] = self._get_error(goal_state, step=step)
+            self.history["goal"][goal_state][step] = self._get_goal_status(step=step)[goal_state]
 
-        reward = super(FixedWingAircraftGoal, self).get_reward(action=action, success=success, potential=potential)
+        self.history["goal"]["all"][step] = self._get_goal_status(step=step)["all"]
 
-        for goal_state in original_values["achieved"]:
-            self.simulator.state[goal_state].value = original_values["achieved"][goal_state]
-            self.target[goal_state] = original_values["desired"][goal_state]
+        reward = super(FixedWingAircraftGoal, self).get_reward(success=success, potential=potential)
 
-        if self.history is not None:
-            self.history["action"] = original_values["action_history"]
-        self.steps_count = original_values["steps_count"]
+        for goal_state in self.goal_states:
+            self.history["target"][goal_state][step] = original_values["target"][goal_state]
+            self.history["error"][goal_state][step] = original_values["error"][goal_state]
+            self.history["goal"][goal_state][step] = original_values["goal"][goal_state]
+
+        self.history["goal"]["all"][step] = original_values["goal"]["all"]
+
         if potential:
             self.prev_shaping = original_values["prev_shaping"]
 
