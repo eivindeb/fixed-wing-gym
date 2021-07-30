@@ -915,23 +915,27 @@ class FixedWingAircraft(gym.Env):
                     res[state + "_target"] = self.history["target"][state]
             np.save(path, res)
 
-    def get_reward(self, action=None, success=False, potential=False, return_dict=False):
+    def get_reward(self, action=None, success=False, potential=False, return_dict=False, step=None):
         """
         Get the reward for the current state of the environment.
 
         :return: (float) reward
         """
+        assert step is None or 0 <= step <= self.steps_count
+        if step is None:
+            step = -1
         reward = 0
         terms = {term["function_class"]: {"val": 0, "weight": term["weight"], "val_shaping": 0} for term in self.cfg["reward"]["terms"]}
         comps = {}
+        slice_end = None if step == -1 else step
 
         for component in self.cfg["reward"]["factors"]:
             if component["class"] == "action":
                 if component["type"] == "value":
-                    val = np.sum(np.abs(self.history["action"][-1]))
+                    val = np.sum(np.abs(self.history["action"][step]))
                 elif component["type"] == "delta":
                     if self.steps_count > 1:
-                        vals = self.history[component["name"]][-component["window_size"]:]
+                        vals = self.history[component["name"]][:slice_end][-component["window_size"]:]
                         deltas = np.diff(vals, axis=0)
                         val = np.sum(np.abs(deltas))
                     else:
@@ -947,39 +951,58 @@ class FixedWingAircraft(gym.Env):
                     raise ValueError("Unexpected type {} for reward class action".format(component["type"]))
             elif component["class"] == "state":
                 if component["type"] == "value":
-                    val = self.simulator.state[component["name"]].value
-                elif component["type"] == "error":
-                    val = self._get_error(component["name"])
-                elif component["type"] == "int_error":
-                    val = np.sum(self.history["error"][component["name"]][-component["window_size"]:])
-                    if self.steps_count < component["window_size"]:
-                        val += (component["window_size"] - self.steps_count) * self.history["error"][component["name"]][0]
-                elif component["type"] == "bound":
-                    if component.get("value_type", "value") == "value":
-                        state_val = self.simulator.state[component["name"]].value
-                    elif component.get("value_type", "value") == "dot":
-                        if len(self.simulator.state[component["name"]].history) <= 1:
-                            state_val = 0
-                        else:
-                            state_val = (self.simulator.state[component["name"]].value - self.simulator.state[component["name"]].history[-2]) / self.simulator.dt
+                    state_val = self.simulator.state[component["name"]].history[step]
+                    if component.get("value_type", "absolute") == "absolute":
+                        val = state_val
+                    elif component.get("value_type", "absolute") == "bound":
+                        val = 0
+                        if component["low"] <= state_val <= component["high"]:
+                            val = component["value"]
                     else:
                         raise NotImplementedError
-                    val = 0
-                    if component["low"] <= state_val <= component["high"]:
-                        val = component["value"]
+                elif component["type"] == "error":
+                    if step == -1:
+                        val = self._get_error(component["name"])
+                    else:
+                        val = self.history["error"][component["name"]][step]
+                elif component["type"] == "int_error":
+                    val = np.sum(self.history["error"][component["name"]][:slice_end][-component["window_size"]:])
+                    if self.steps_count < component["window_size"]:
+                        val += (component["window_size"] - self.steps_count) * self.history["error"][component["name"]][0]
                 elif component["type"] == "delta":
-                    val = self.simulator.state[component["name"]].value - self.simulator.state[component["name"]].history[-1]
-                elif component["type"] == "dot":
-                    if len(self.simulator.state[component["name"]].history) <= 1:
+                    if len(self.simulator.state[component["name"]].history) <= 1 or step == 0:
                         val = 0
                     else:
-                        val = (self.simulator.state[component["name"]].value - self.simulator.state[component["name"]].history[-2]) / self.simulator.dt
+                        state_val = self.simulator.state[component["name"]].history[step] - self.simulator.state[component["name"]].history[step - 1]
+                        if component.get("value_type", "absolute") == "absolute":
+                            val = state_val
+                        elif component.get("value_type", "absolute") == "bound":
+                            val = 0
+                            if component["low"] <= state_val <= component["high"]:
+                                val = component["value"]
+                        else:
+                            raise NotImplementedError
+                elif component["type"] == "dot":
+                    if len(self.simulator.state[component["name"]].history) <= 1 or step == 0:
+                        val = 0
+                    else:
+                        dt = self.history["dt"][step] if step == -1 else self.history["dt"][step - 1]
+                        state_val = (self.simulator.state[component["name"]].history[step] - self.simulator.state[component["name"]].history[step - 1]) / dt
+
+                        if component.get("value_type", "absolute") == "absolute":
+                            val = state_val
+                        elif component.get("value_type", "absolute") == "bound":
+                            val = 0
+                            if component["low"] <= state_val <= component["high"]:
+                                val = component["value"]
+                        else:
+                            raise NotImplementedError
                 else:
                     raise ValueError("Unexpected reward type {} for class state".format(component["type"]))
             elif component["class"] == "success":
                 if success:
                     if component["value"] == "timesteps":
-                        val = (self.steps_max - self.steps_count)
+                        val = (self.steps_max - (self.steps_count if step == -1 else step))
                     else:
                         val = component["value"]
                 else:
@@ -989,15 +1012,22 @@ class FixedWingAircraft(gym.Env):
             elif component["class"] == "goal":
                 val = 0
                 if component["type"] == "per_state":
-                    for target_state, is_achieved in self._get_goal_status().items():
+                    if step == -1:
+                        goal_status = self._get_goal_status()
+                    else:
+                        goal_status = {k: v[step] for k, v in self.history["goal"].items()}
+                    for target_state, is_achieved in goal_status.items():
                         if target_state == "all":
                             continue
-                        #val += component["value"] / len(self.target) if is_achieved else 0
-                        div_fac = 5 if target_state == "Va" else 2.5
-                        val += component["value"] / div_fac if is_achieved else 0
-
+                        val += component["value"] / len(self.target) if is_achieved else 0
+                        #div_fac = 5 if target_state == "Va" else 2.5
+                        #val += component["value"] / div_fac if is_achieved else 0
                 elif component["type"] == "all":
-                    val += component["value"] if self._get_goal_status()["all"] else 0
+                    if step == -1:
+                        goal_status = self._get_goal_status()
+                    else:
+                        goal_status = {k: v[step] for k, v in self.history["goal"].items()}
+                    val += component["value"] if goal_status["all"] else 0
                 else:
                     raise ValueError("Unexpected reward type {} for class goal".format(component["type"]))
             elif component["class"] == "gain":
@@ -1009,8 +1039,12 @@ class FixedWingAircraft(gym.Env):
                     actuator = "throttle"
                 else:
                     raise ValueError
-                control_command = self.simulator.state[actuator].history["command"][-1]
-                error = self.history["error"][component["name"]][-1]
+                if step == -1:
+                    control_command = self.simulator.state[actuator].history["command"][step]
+                    error = self.history["error"][component["name"]][step]
+                else:
+                    control_command = self.simulator.state[actuator].history["command"][step - 1]
+                    error = self.history["error"][component["name"]][step - 1]
                 val = np.abs(control_command / error)
                 if component["type"] == "bound":
                     val = component["value"] if val <= component["high"] else 0
