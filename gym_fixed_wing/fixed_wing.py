@@ -1314,17 +1314,23 @@ class FixedWingAircraft(gym.Env):
     def get_env_parameters(self, normalize=True):
         return self.get_simulator_parameters(normalize)
 
-    def _get_error(self, state):
+    def _get_error(self, state, step=None):
         """
         Get difference between current value of state and target value.
 
         :param state: (string) name of state
         :return: (float) error
         """
-        if getattr(self.simulator.state[state], "wrap", False):
-            return self._get_angle_dist(self.target[state], self.simulator.state[state].value)
+        if step is None:
+            state_val = self.simulator.state[state].value
+            target = self.target[state]
         else:
-            return self.target[state] - self.simulator.state[state].value
+            state_val = self.simulator.state[state].history[step]
+            target = self.history["target"][state][step]
+        if getattr(self.simulator.state[state], "wrap", False):
+            return self._get_angle_dist(target, state_val)
+        else:
+            return target - state_val
 
     def _get_angle_dist(self, ang1, ang2):
         """
@@ -1340,7 +1346,7 @@ class FixedWingAircraft(gym.Env):
 
         return dist
 
-    def _get_goal_status(self):
+    def _get_goal_status(self, step=None):
         """
         Get current status of whether the goal for each target state as specified by configuration is achieved.
 
@@ -1350,7 +1356,7 @@ class FixedWingAircraft(gym.Env):
         for state, props in self._target_props.items():
             bound = props.get("bound", None)
             if bound is not None:
-                err = self._get_error(state)
+                err = self._get_error(state, step=step)
                 goal_status[state] = np.abs(err) <= bound
 
         goal_status["all"] = all(goal_status.values())
