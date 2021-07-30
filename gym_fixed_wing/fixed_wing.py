@@ -500,7 +500,8 @@ class FixedWingAircraft(gym.Env):
         self.history = {"action": [], "reward": [],
                         "target": {k: [v] for k, v in self.target.items()},
                         "error": {k: [self._get_error(k)] for k in self.target.keys()},
-                        "integrator_decay": {k: [v["value"]] for k, v in self._integrator_decay_states.items()}
+                        "integrator_decay": {k: [v["value"]] for k, v in self._integrator_decay_states.items()},
+                        "dt": []
                         }
         obs = self.get_observation()
         self.history["observation"] = [obs]
@@ -553,6 +554,7 @@ class FixedWingAircraft(gym.Env):
 
         if self.step_size_lambda is not None:
             self.simulator.dt = self.step_size_lambda()
+            self.history["dt"].append(self.simulator.dt)
 
         if self.steps_count >= self.steps_max > 0:
             done = True
