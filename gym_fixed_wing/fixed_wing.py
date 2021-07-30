@@ -1702,24 +1702,12 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         return np.array(low), np.array(high)
 
     def compute_reward(self, achieved_goal, desired_goal, info):
-        def get_data_at_step(data, step):
-            if step >= len(data):
-                return data[-1]
-            else:
-                return data[step]
-        step = info.get("step")
-        original_values = {"error": {}, "goal": {}, "target": {}}
+        step = info.get("step") if info.get("step") <= self.steps_count else self.steps_count
         if self.obs_norm:
             achieved_goal = achieved_goal * self.goal_vars + self.goal_means
             desired_goal = desired_goal * self.goal_vars + self.goal_means
         success = False  # TODO: dont know if i want to use this, is get_goal_status in any case
-
-        for i, goal_state in enumerate(self.goal_states):
-            original_values["error"][goal_state] = get_data_at_step(self.history["error"][goal_state], step)
-            original_values["goal"][goal_state] = get_data_at_step(self.history["goal"][goal_state], step)
-            original_values["target"][goal_state] = get_data_at_step(self.history["target"][goal_state], step)
-
-        original_values["goal"]["all"] = get_data_at_step(self.history["goal"]["all"], step)
+        original_values = {"target": {}, "error": {}, "goal": {}}
 
         potential = self.cfg["reward"]["form"] == "potential"
         if potential:
@@ -1736,27 +1724,27 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
                     self.prev_shaping[rew_term["function_class"]] = None
 
         for i, goal_state in enumerate(self.goal_states):
+            original_values["target"][goal_state] = self.history["target"][goal_state][step]
+            original_values["error"][goal_state] = self.history["error"][goal_state][step]
+            original_values["goal"][goal_state] = self.history["goal"][goal_state][step]
             self.history["target"][goal_state][step] = desired_goal[i]
             self.history["error"][goal_state][step] = self._get_error(goal_state, step=step)
             self.history["goal"][goal_state][step] = self._get_goal_status(step=step)[goal_state]
 
+        original_values["goal"]["all"] = self.history["goal"]["all"][step]
         self.history["goal"]["all"][step] = self._get_goal_status(step=step)["all"]
 
         reward = super(FixedWingAircraftGoal, self).get_reward(success=success, potential=potential)
 
-        for goal_state in self.goal_states:
-            if step < len(self.history["target"][goal_state]):
-                self.history["target"][goal_state][step] = original_values["target"][goal_state]
-            if step < len(self.history["error"][goal_state]):
-                self.history["error"][goal_state][step] = original_values["error"][goal_state]
-            if step < len(self.history["goal"][goal_state]):
-                self.history["goal"][goal_state][step] = original_values["goal"][goal_state]
-
-        if step < len(self.history["goal"]["all"]):
-            self.history["goal"]["all"][step] = original_values["goal"]["all"]
-
         if potential:
             self.prev_shaping = original_values["prev_shaping"]
+
+        for i, goal_state in enumerate(self.goal_states):
+            self.history["target"][goal_state][step] = original_values["target"][goal_state]
+            self.history["error"][goal_state][step] = original_values["error"][goal_state]
+            self.history["goal"][goal_state][step] = original_values["goal"][goal_state]
+
+        self.history["goal"]["all"][step] = original_values["goal"]["all"]
 
         return reward
 
