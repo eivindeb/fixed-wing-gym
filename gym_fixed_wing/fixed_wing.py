@@ -1734,7 +1734,7 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         original_values["goal"]["all"] = self.history["goal"]["all"][step]
         self.history["goal"]["all"][step] = self._get_goal_status(step=step)["all"]
 
-        reward = super(FixedWingAircraftGoal, self).get_reward(success=success, potential=potential)
+        reward = super(FixedWingAircraftGoal, self).get_reward(success=success, potential=potential, step=step)
 
         if potential:
             self.prev_shaping = original_values["prev_shaping"]
