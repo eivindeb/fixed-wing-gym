@@ -554,7 +554,7 @@ class FixedWingAircraft(gym.Env):
 
         if self.step_size_lambda is not None:
             self.simulator.dt = self.step_size_lambda()
-            self.history["dt"].append(self.simulator.dt)
+        self.history["dt"].append(self.simulator.dt)
 
         if self.steps_count >= self.steps_max > 0:
             done = True
