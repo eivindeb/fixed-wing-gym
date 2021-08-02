@@ -4,8 +4,8 @@ from pyfly.pyfly import PyFly
 from pyfly.pid_controller import PIDController
 import json
 import numpy as np
-#import matplotlib.pyplot as plt
-#import matplotlib.gridspec
+import matplotlib.pyplot as plt
+import matplotlib.gridspec
 import copy
 import os
 from collections import deque
