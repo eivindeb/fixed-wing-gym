@@ -240,15 +240,15 @@ class FixedWingAircraft(gym.Env):
             self.pid_controller = PIDController(self.simulator.dt)
             if len(self.cfg["action"]["pid"].get("states", [])):
                 pid_outputs = ["elevator", "aileron", "throttle"]
-                pid_references = [0 for i in range(len(pid_outputs))]
+                pid_references = [{"distribution": "constant", "value": 0} for i in range(len(pid_outputs))]
                 self.pid_actions = {}
                 for pid_action_var in self.cfg["action"]["pid"]["states"]:
                     assert pid_action_var["name"] in pid_outputs
                     assert pid_action_var["name"] in self.simulator.actuation.inputs
                     self.pid_actions[self.simulator.actuation.inputs.index(pid_action_var["name"])] = pid_outputs.index(pid_action_var["name"])
-                    pid_references[pid_outputs.index(pid_action_var["name"])] = pid_action_var.get("reference", 0)
+                    pid_references[pid_outputs.index(pid_action_var["name"])] = pid_action_var.get("reference", {"distribution": "constant", "value": 0})
                 self.pid_references = pid_references
-                self.pid_controller.set_reference(*pid_references)
+                #self.pid_controller.set_reference(*pid_references)
         else:
             self.pid_controller = None
             self.pid_actions = None
@@ -408,6 +408,15 @@ class FixedWingAircraft(gym.Env):
         self.steps_count = 0
 
         if self.pid_controller is not None:
+            references = []
+            for state_ref in self.pid_references:
+                if state_ref["distribution"] == "constant":
+                    references.append(state_ref["value"])
+                elif state_ref["distribution"] == "uniform":
+                    references.append(self.np_random.uniform(state_ref["low"], state_ref["high"]))
+                else:
+                    raise NotImplementedError
+            self.pid_controller.set_reference(*references)
             self.pid_controller.reset()
 
         if state is None and self.sampler is not None and False:
