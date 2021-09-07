@@ -283,7 +283,7 @@ class FixedWingAircraft(gym.Env):
         self._rew_factors_init = copy.deepcopy(self.cfg["reward"]["factors"])
         self._sim_model = copy.deepcopy(self.cfg["simulator"].get("model", {}))
 
-        self.delay_until_reset = True
+        self.delay_until_reset = False
         self.render_on_reset = False
         self.render_on_reset_kw = {}
         self.save_on_reset = False
