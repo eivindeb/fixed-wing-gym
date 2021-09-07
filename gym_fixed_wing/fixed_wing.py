@@ -1365,7 +1365,7 @@ class FixedWingAircraft(gym.Env):
             state_val = self.simulator.state[state].history[step]
             target = self.history["target"][state][step]
         if getattr(self.simulator.state[state], "wrap", False):
-            return self._get_angle_dist(target, state_val)
+            return self._get_angle_dist(state_val, target)  # This function returns arg2 - arg1
         else:
             return target - state_val
 
