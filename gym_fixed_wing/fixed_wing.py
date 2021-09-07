@@ -29,7 +29,7 @@ class FixedWingAircraft(gym.Env):
                 try:
                     if isinstance(val, list):
                         parent[attr] = val
-                    elif isinstance(val, dict) or isinstance(parent[attr], list):
+                    elif isinstance(val, dict) or isinstance(parent.get(attr, None), list):
                         set_config_attrs(parent[attr], val)
                     else:
                         parent[attr] = val
