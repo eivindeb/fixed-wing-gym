@@ -512,7 +512,7 @@ class FixedWingAircraft(gym.Env):
                         "integrator_decay": {k: [v["value"]] for k, v in self._integrator_decay_states.items()},
                         "dt": []
                         }
-        obs = self.get_observation()
+        obs = self._get_observation()
         self.history["observation"] = [obs]
 
         if self.goal_enabled:
@@ -611,7 +611,7 @@ class FixedWingAircraft(gym.Env):
                 self._integrator_decay_states[state_name]["value"] = new_int_val
                 self.history["integrator_decay"][state_name].append(new_int_val)
 
-            obs = self.get_observation()
+            obs = self._get_observation()
             self.history["observation"].append(obs)
             self.history["reward"].append(reward)
         else:
@@ -635,7 +635,7 @@ class FixedWingAircraft(gym.Env):
 
             for state, status in self._get_goal_status().items():
                 self.history["goal"][state].append(status)
-            obs = self.get_observation()
+            obs = self._get_observation()
 
         if done:
             for metric in self.cfg.get("metrics", []):
@@ -1105,21 +1105,25 @@ class FixedWingAircraft(gym.Env):
         else:
             return reward
 
-    def get_observation(self):
+    def _get_observation(self):
         """
         Get the observation vector for current state of the environment.
 
         :return: ([float]) observation vector
         """
-        step = self.cfg["observation"].get("step", 1)
+        obs_gen_steps = [1]
         if self._obs is None:
             obs = []
-            obs_gen_steps = (self.cfg["observation"]["length"] + (1 if step == 1 else 0)) * step
+            if self.cfg["observation"]["length"] > 1:
+                step = self.cfg["observation"]["step"]
+                if isinstance(step, list):
+                    obs_gen_steps.extend(step)
+                else:
+                    obs_gen_steps.extend([1 + step * i for i in range(1, self.cfg["observation"]["length"])])
         else:
             if self._obs["step"] == self.steps_count:
-                return self._obs["obs"]
+                return np.array(self._obs["obs"])
             obs = self._obs["obs"]
-            obs_gen_steps = 2
 
         if self.scale_actions:
             action_states = [state["name"] for state in self.cfg["action"]["states"]]
@@ -1137,12 +1141,12 @@ class FixedWingAircraft(gym.Env):
         else:
             latency = None
 
-        for i in range(1, obs_gen_steps, step):
+        for i in obs_gen_steps:
             obs_i = []
             if i > self.steps_count:
+                if self.cfg["observation"]["length"] > 1 and i > 1:
+                    init_noise = self.np_random.normal(loc=0, scale=0.5) * self.simulator.dt * i
                 i = self.steps_count + 1
-                if self.cfg["observation"]["length"] > 1:
-                    init_noise = self.np_random.normal(loc=0, scale=0.5) * self.simulator.dt
             for obs_var in self.cfg["observation"]["states"]:
                 if obs_var["type"] == "state":
                     if latency is not None:
@@ -1269,13 +1273,37 @@ class FixedWingAircraft(gym.Env):
                 else:
                     obs.insert(0, obs_i)
                     if self.cfg["observation"]["length"] > 1:
-                        del obs[-1]
+                        step = self.cfg["observation"].get("step", 1)
+                        if isinstance(step, int):
+                            if self.steps_count % step == 0:
+                                del obs[-1]
+                            else:
+                                del obs[1]
+                        elif isinstance(step, list):
+                            del obs[1]
+                            b = 1 if len(self.history["observation"]) > self.steps_count else 0
+                            for step_i, s in enumerate(step):
+                                if s + b <= len(self.history["observation"]):  # data exists for t - step_i
+                                    obs[step_i + 1] = self.history["observation"][-(s + b)][0]
+                                else:
+                                    obs[step_i + 1] = self.history["observation"][0][step_i + 1]
+                        else:
+                            raise ValueError
+
             else:
                 raise ValueError("Unexpected observation shape {}".format(self.cfg["observation"]["shape"]))
 
         self._obs = {"step": self.steps_count, "obs": obs}
 
         return np.array(obs)
+
+    def get_observation(self):
+        """
+        Get the observation vector for current state of the environment.
+
+        :return: ([float]) observation vector
+        """
+        return self._get_observation()
 
     def get_initial_state(self):
         res = {"state": {}, "target": {}}
@@ -1684,7 +1712,7 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         ))
 
     def get_observation(self):
-        obs = super(FixedWingAircraftGoal, self).get_observation()
+        obs = super(FixedWingAircraftGoal, self)._get_observation()
         achieved_goal = obs[..., self.obs_idxs["achieved"]]
         desired_goal = obs[..., self.obs_idxs["desired"]]
         obs = obs[..., self.obs_idxs["obs"]]
@@ -1696,6 +1724,15 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         )
 
         return obs
+
+    def step(self, action):
+        _, reward, done, info = super().step(action)
+        obs = self.get_observation()
+        return obs, reward, done, info
+
+    def reset(self, state=None, target=None, param=None, rew_factors=None, dt=None, **sim_reset_kw):
+        _ = super().reset(state=state, target=target, param=param, rew_factors=rew_factors, dt=dt, **sim_reset_kw)
+        return self.get_observation()
 
     def get_goal_limits(self):
         low, high = [], []
