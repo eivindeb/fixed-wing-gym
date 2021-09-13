@@ -68,7 +68,7 @@ class FixedWingAircraft(gym.Env):
         self.obs_norm = self.cfg["observation"].get("normalize", False)
         self.obs_module_indices = {"pi": [], "vf": []}
         self._obs = None
-        self._obs_latency_lambda = None
+        self.latency = None
 
         obs_low = []
         obs_high = []
@@ -483,28 +483,7 @@ class FixedWingAircraft(gym.Env):
             self._integrator_decay_states[state_name]["value"] = 0
 
         if self.cfg["observation"].get("latency", None) is not None:
-            base_cfg, noise_cfg = self.cfg["observation"]["latency"]["base"], self.cfg["observation"]["latency"].get("noise", None)
-            if base_cfg["distribution"] == "constant":
-                base = base_cfg["value"]
-            elif base_cfg["distribution"] == "uniform":
-                base = self.np_random.uniform(base_cfg["low"], base_cfg["high"])
-            elif base_cfg["distribution"] == "normal":
-                base = np.clip(self.np_random.normal(base_cfg["loc"], base_cfg["scale"]), 0, None)
-            else:
-                ValueError("Unexpected distribution type {}".format(base_cfg["distribution"]))
-
-            if noise_cfg is not None:
-                if noise_cfg["distribution"] == "uniform":
-                    self._obs_latency_lambda = lambda: base + self.np_random.uniform(noise_cfg["low"], noise_cfg["high"])
-                elif noise_cfg["distribution"] == "normal":
-                    self._obs_latency_lambda = lambda: base + np.clip(self.np_random.normal(noise_cfg["loc"], noise_cfg["scale"]), 0, None)
-                elif noise_cfg["distribution"] == "exponential":
-                    rate = self.np_random.uniform(noise_cfg["low"], noise_cfg["high"])
-                    self._obs_latency_lambda = lambda: base + self.np_random.exponential(1 / rate)
-                else:
-                    ValueError("Unexpected distribution type {}".format(noise_cfg["distribution"]))
-            else:
-                self._obs_latency_lambda = lambda: base
+            self.latency = self.cfg["observation"].get("latency", None)
 
         self.history = {"action": [], "reward": [],
                         "target": {k: [v] for k, v in self.target.items()},
@@ -607,7 +586,10 @@ class FixedWingAircraft(gym.Env):
                 self.history["error"][k].append(self._get_error(k))
 
             for state_name, state_props in self._integrator_decay_states.items():
-                new_int_val = state_props["value"] * state_props["decay_factor"] + self._get_error(state_name)  # TODO: add support for non target states?
+                if self.latency is not None:
+                    new_int_val = state_props["value"] * state_props["decay_factor"] + self._get_error(state_name, delay=self.latency)  # TODO: add support for non target states?
+                else:
+                    new_int_val = state_props["value"] * state_props["decay_factor"] + self._get_error(state_name)
                 self._integrator_decay_states[state_name]["value"] = new_int_val
                 self.history["integrator_decay"][state_name].append(new_int_val)
 
@@ -1133,13 +1115,10 @@ class FixedWingAircraft(gym.Env):
         if self.obs_noise is not None:
             obs_noise = self.obs_noise()
 
-        if self._obs_latency_lambda is not None:
-            latency = self._obs_latency_lambda()
-            intp_start_idx = int(np.ceil(latency / self.simulator.dt))
-            intp_end_idx = int(np.floor(latency / self.simulator.dt))
-            intp_point = (latency / self.simulator.dt) % 1
+        if self.latency is not None:
+            latency = self.latency
         else:
-            latency = None
+            latency = 0
 
         for i in obs_gen_steps:
             obs_i = []
@@ -1149,43 +1128,13 @@ class FixedWingAircraft(gym.Env):
                 i = self.steps_count + 1
             for obs_var in self.cfg["observation"]["states"]:
                 if obs_var["type"] == "state":
-                    if latency is not None:
-                        if intp_start_idx == intp_end_idx:
-                            val = self.simulator.state[obs_var["name"]].history[-i - intp_end_idx]
-                        elif intp_start_idx + i > len(self.simulator.state[obs_var["name"]].history):
-                            val = self.simulator.state[obs_var["name"]].history[0]
-                        else:
-                            val = self.simulator.state[obs_var["name"]].history[-i - intp_start_idx] * intp_point + \
-                                  self.simulator.state[obs_var["name"]].history[-i - intp_end_idx] * (1 - intp_point)
-                    else:
-                        val = self.simulator.state[obs_var["name"]].history[-i]
+                    val = self.simulator.state[obs_var["name"]].history[-min(i + latency, len(self.simulator.state[obs_var["name"]].history))]
                 elif obs_var["type"] == "target":
                     if obs_var["value"] == "relative":
-                        if latency is not None:
-                            if intp_start_idx == intp_end_idx:
-                                val = self.history["error"][obs_var["name"]][-i - intp_end_idx]
-                            elif intp_start_idx + i > len(self.history["error"][obs_var["name"]]):
-                                val = self.history["error"][obs_var["name"]][0]
-                            else:
-                                val = self.history["error"][obs_var["name"]][-i - intp_start_idx] * intp_point + \
-                                      (self._get_error(obs_var["name"]) if intp_end_idx == 0 else self.history["error"][obs_var["name"]][-i - intp_end_idx]) * (1 - intp_point)
-
-                        else:
-                            val = self._get_error(obs_var["name"]) if i == 1 else self.history["error"][obs_var["name"]][-i]
+                        val = self._get_error(obs_var["name"], delay=latency if latency > 0 else None) if i == 1 else self.history["error"][obs_var["name"]][-min(i + latency, len(self.history["error"][obs_var["name"]]))]
                     elif obs_var["value"] == "absolute":
-                        if latency is not None:
-                            if intp_start_idx == intp_end_idx:
-                                val = self.history["target"][obs_var["name"]][-i - intp_end_idx]
-                            elif intp_start_idx + i > len(self.history["target"][obs_var["name"]]):
-                                val = self.history["target"][obs_var["name"]][0]
-                            else:
-                                val = self.history["target"][obs_var["name"]][-i - intp_start_idx] * intp_point + \
-                                      (self.target[obs_var["name"]] if intp_end_idx == 0 else
-                                       self.history["target"][obs_var["name"]][-i - intp_end_idx]) * (1 - intp_point)
-
-                        else:
-                            val = self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i]
-                    elif obs_var["value"] == "integrator":  # TODO: add latency to integrator
+                        val = self.target[obs_var["name"]] if i == 1 else self.history["target"][obs_var["name"]][-i]
+                    elif obs_var["value"] == "integrator":
                         if obs_var.get("int_type", "window") == "window":
                             if self.history is None:
                                 if obs_var["window_size"] > 0:
@@ -1351,7 +1300,7 @@ class FixedWingAircraft(gym.Env):
     def get_env_parameters(self, normalize=True):
         return self.get_simulator_parameters(normalize)
 
-    def _get_error(self, state, step=None):
+    def _get_error(self, state, step=None, delay=None):
         """
         Get difference between current value of state and target value.
 
@@ -1359,9 +1308,14 @@ class FixedWingAircraft(gym.Env):
         :return: (float) error
         """
         if step is None:
-            state_val = self.simulator.state[state].value
-            target = self.target[state]
+            if delay is None:
+                state_val = self.simulator.state[state].value
+                target = self.target[state]
+            else:
+                state_val = self.simulator.state[state].history[-min(delay, len(self.simulator.state[state].history))]
+                target = self.target[state]
         else:
+            assert delay is None
             state_val = self.simulator.state[state].history[step]
             target = self.history["target"][state][step]
         if getattr(self.simulator.state[state], "wrap", False):

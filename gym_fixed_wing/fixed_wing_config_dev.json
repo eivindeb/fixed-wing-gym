@@ -12,6 +12,7 @@
       "sigma": 0.005,
       "theta": 1
     },
+    "latency": 5,
     "states": [
       {
         "name": "roll",
