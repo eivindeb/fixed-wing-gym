@@ -1183,7 +1183,7 @@ class FixedWingAircraft(gym.Env):
                             val = self.simulator.state[obs_var["name"]].value
                             if self.scale_actions:
                                 a_i = action_indexes[obs_var["name"]]
-                                action = np.zeros(shape=(len(action_indexes)))
+                                action = np.zeros(shape=(len(action_states)))
                                 action[a_i] = val
                                 val = self.linear_action_scaling(action, direction="backward")[a_i]
                         else:
