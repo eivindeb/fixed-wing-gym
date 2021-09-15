@@ -1010,9 +1010,9 @@ class FixedWingAircraft(gym.Env):
                     for target_state, is_achieved in goal_status.items():
                         if target_state == "all":
                             continue
-                        val += component["value"] / len(self.target) if is_achieved else 0
-                        #div_fac = 5 if target_state == "Va" else 2.5
-                        #val += component["value"] / div_fac if is_achieved else 0
+                        #val += component["value"] / len(self.target) if is_achieved else 0
+                        div_fac = 5 if target_state == "Va" else 2.5
+                        val += component["value"] / div_fac if is_achieved else 0
                 elif component["type"] == "all":
                     if step == -1:
                         goal_status = self._get_goal_status()
