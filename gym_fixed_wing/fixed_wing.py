@@ -1040,7 +1040,7 @@ class FixedWingAircraft(gym.Env):
                     val = component["value"] if goal_status["all"] else 0
                 elif component["type"] == "quadratic":
                     if goal_status[component["name"]]:
-                        val = component["value"] - (self._get_error(component["name"]) / self._target_props[component["name"]]["bound"]) ** 2
+                        val = component["value"] - (self._get_error(component["name"], step=step) / self._target_props[component["name"]]["bound"]) ** 2
                 else:
                     raise ValueError("Unexpected reward type {} for class goal".format(component["type"]))
             elif component["class"] == "gain":
