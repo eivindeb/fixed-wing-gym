@@ -158,13 +158,6 @@
         "norm": false,
         "noise_weight": 0,
         "module": "vf"
-      },
-      {
-        "name": "action",
-        "type": "reward",
-        "value": "scaling",
-        "norm": false,
-        "noise_weight": 0
       }
     ]
   },
@@ -177,12 +170,22 @@
       {
         "name": "elevator",
         "low": "max",
-        "high": "max"
+        "high": "max",
+        "disturbance": {
+          "type": "uniform",
+          "low": -0.15,
+          "high": 0.15
+        }
       },
       {
         "name": "aileron",
         "low": "max",
-        "high": "max"
+        "high": "max",
+        "disturbance": {
+          "type": "uniform",
+          "low": -0.15,
+          "high": 0.15
+        }
       },
       {
         "name": "throttle",

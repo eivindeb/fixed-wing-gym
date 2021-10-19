@@ -275,6 +275,9 @@ class FixedWingAircraft(gym.Env):
             self.action_bounds_min = np.full(self.action_space.shape, self.cfg["action"].get("scale_low", -1)) *\
                                      self.cfg["action"]["bounds_multiplier"]
 
+        self.sample_input_disturbance = any(["disturbance" in a_s for a_s in self.cfg["action"]["states"]])
+        self.input_disturbance = np.array([0.0 for av in self.cfg["action"]["states"]])
+
         self.goal_enabled = self.cfg["target"]["success_streak_req"] > 0
 
         self.target = None
@@ -388,7 +391,7 @@ class FixedWingAircraft(gym.Env):
 
         self.use_curriculum = True
 
-    def reset(self, state=None, target=None, param=None, rew_factors=None, dt=None, **sim_reset_kw):
+    def reset(self, state=None, target=None, param=None, rew_factors=None, dt=None, input_disturbance=None, **sim_reset_kw):
         """
         Reset state of environment.
 
@@ -445,6 +448,21 @@ class FixedWingAircraft(gym.Env):
         if self.obs_noise is not None:
             self.obs_noise.reset()
             self.obs_noise.dt = self.simulator.dt
+
+        if input_disturbance is not None or self.sample_input_disturbance:
+            for a_i, props in enumerate(self.cfg["action"]["states"]):
+                if input_disturbance is not None and props["name"] in input_disturbance:
+                    self.input_disturbance[a_i] = input_disturbance[props["name"]]
+                elif "disturbance" in props:
+                    if props["disturbance"]["type"] == "uniform":
+                        self.input_disturbance[a_i] = self.np_random.uniform(props["disturbance"]["low"],
+                                                                             props["disturbance"]["high"])
+                    else:
+                        raise ValueError
+                else:
+                    self.input_disturbance[a_i] = 0
+        elif np.any(self.input_disturbance > 0):
+            self.input_disturbance = np.zeros_like(self.input_disturbance)
 
         for rew_term in self.cfg["reward"]["terms"]:
             self.prev_shaping[rew_term["function_class"]] = None
@@ -511,13 +529,14 @@ class FixedWingAircraft(gym.Env):
         assert not np.any(np.isnan(action))
         self.history["action"].append(np.copy(action))
 
+        action += self.trim + self.input_disturbance
+
         if self.scale_actions:
-            action = self.linear_action_scaling(np.clip(action + self.trim,
+            action = self.linear_action_scaling(np.clip(action,
                                                         self.cfg["action"].get("scale_low"),
                                                         self.cfg["action"].get("scale_high")
                                                         )
                                                 )
-
 
         control_input = list(action)
 
@@ -1684,8 +1703,8 @@ class FixedWingAircraftGoal(FixedWingAircraft, gym.GoalEnv):
         obs = self.get_observation()
         return obs, reward, done, info
 
-    def reset(self, state=None, target=None, param=None, rew_factors=None, dt=None, **sim_reset_kw):
-        _ = super().reset(state=state, target=target, param=param, rew_factors=rew_factors, dt=dt, **sim_reset_kw)
+    def reset(self, state=None, target=None, param=None, rew_factors=None, dt=None, input_disturbance=None, **sim_reset_kw):
+        _ = super().reset(state=state, target=target, param=param, rew_factors=rew_factors, dt=dt, input_disturbance=input_disturbance, **sim_reset_kw)
         return self.get_observation()
 
     def get_goal_limits(self):
