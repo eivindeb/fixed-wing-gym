@@ -1021,23 +1021,26 @@ class FixedWingAircraft(gym.Env):
                 val = component["value"]
             elif component["class"] == "goal":
                 val = 0
+                if step == -1:
+                    goal_status = self._get_goal_status()
+                else:
+                    goal_status = {k: v[step] for k, v in self.history["goal"].items()}
                 if component["type"] == "per_state":
-                    if step == -1:
-                        goal_status = self._get_goal_status()
-                    else:
-                        goal_status = {k: v[step] for k, v in self.history["goal"].items()}
                     for target_state, is_achieved in goal_status.items():
                         if target_state == "all":
                             continue
-                        #val += component["value"] / len(self.target) if is_achieved else 0
-                        div_fac = 5 if target_state == "Va" else 2.5
-                        val += component["value"] / div_fac if is_achieved else 0
+                        val += component["value"] / len(self.target) if is_achieved else 0
+                        #div_fac = 5 if target_state == "Va" else 2.5
+                        #val += component["value"] / div_fac if is_achieved else 0
                 elif component["type"] == "all":
                     if step == -1:
                         goal_status = self._get_goal_status()
                     else:
                         goal_status = {k: v[step] for k, v in self.history["goal"].items()}
-                    val += component["value"] if goal_status["all"] else 0
+                    val = component["value"] if goal_status["all"] else 0
+                elif component["type"] == "quadratic":
+                    if goal_status[component["name"]]:
+                        val = component["value"] - (self._get_error(component["name"]) / self._target_props[component["name"]]["bound"]) ** 2
                 else:
                     raise ValueError("Unexpected reward type {} for class goal".format(component["type"]))
             elif component["class"] == "gain":

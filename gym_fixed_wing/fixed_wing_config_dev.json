@@ -241,23 +241,21 @@
     "factors": [
       {
         "name": "roll",
-        "class": "gain",
-        "type": "bound",
+        "class": "goal",
+        "type": "quadratic",
         "function_class": "linear",
-        "high": 4,
-        "scaling": 1,
-        "value": 0.167,
+        "scaling": 2,
+        "value": 1,
         "shaping": false,
         "sign": 1
       },
       {
         "name": "pitch",
-        "class": "gain",
-        "type": "bound",
+        "class": "goal",
+        "type": "quadratic",
         "function_class": "linear",
-        "high": 4,
-        "scaling": 1,
-        "value": 0.167,
+        "scaling": 2,
+        "value": 1,
         "shaping": false,
         "sign": 1
       }
